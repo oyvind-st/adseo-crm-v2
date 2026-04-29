@@ -43,6 +43,8 @@ import {
 } from 'lucide-react';
 import { TaskItem } from '../TaskItem';
 import { DateTimePicker } from '../DateTimePicker';
+import { supabase } from '../../../lib/supabase';
+import { Button, Avatar, Badge, PriorityBadge, StatusBadge, Loading, Card } from '../shared';
 
 export function CustomerDetailMVP() {
   const { id } = useParams();
@@ -211,42 +213,44 @@ export function CustomerDetailMVP() {
   ];
 
   // Customer data
-  const customer = {
-    id,
-    name: 'Nordic Tech AS',
-    legalName: 'Nordic Tech Solutions AS',
-    orgNumber: '123456789',
-    website: 'www.nordictech.no',
+  const [supaCustomer, setSupaCustomer] = useState<any>(null);
+  const [supaLoading, setSupaLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) return;
+    supabase.from('kunder')
+      .select('*, kontakter(*), tjenester(*), leveranser(*, leveranse_oppgaver(*))')
+      .eq('id', id).single()
+      .then(({ data }) => {
+        setSupaCustomer(data);
+        setSupaLoading(false);
+      });
+  }, [id]);
+
+  // Build customer object from Supabase data (fallback to mock if loading)
+  const customer = supaCustomer ? {
+    id: supaCustomer.id,
+    name: supaCustomer.bedriftsnavn,
+    legalName: supaCustomer.juridisk_navn || supaCustomer.bedriftsnavn,
+    orgNumber: supaCustomer.org_nummer || '—',
+    website: supaCustomer.nettside || '',
     status: 'Active',
-    healthScore: 85,
-    healthStatus: 'good',
+    healthScore: supaCustomer.helse_score || 75,
+    healthStatus: supaCustomer.helse_score >= 80 ? 'good' : supaCustomer.helse_score >= 60 ? 'warning' : 'danger',
     owner: 'Ola Nordmann',
     team: 'Team Oslo',
     country: 'Norge',
-    city: 'Oslo',
-    monthlyValue: 45000,
-    startDate: '15. mars 2024',
+    city: supaCustomer.sted?.split(',')[0] || 'Oslo',
+    monthlyValue: supaCustomer.mrr || 0,
+    startDate: supaCustomer.kunde_siden ? new Date(supaCustomer.kunde_siden).toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric' }) : '—',
     lastContact: '2 dager siden',
-    services: [
-      { name: 'SEO', status: 'Active', owner: 'Ola Nordmann', startDate: '15.03.2024', monthlyValue: 25000 },
-      { name: 'Google Ads', status: 'Onboarding', owner: 'Kari Jensen', startDate: '20.03.2024', monthlyValue: 20000 }
-    ],
-    contacts: [
-      {
-        name: 'Maria Hansen',
-        title: 'Markedssjef',
-        email: 'maria@nordictech.no',
-        phone: '+47 123 45 678',
-        isPrimary: true
-      },
-      {
-        name: 'Erik Larsen',
-        title: 'CEO',
-        email: 'erik@nordictech.no',
-        phone: '+47 987 65 432',
-        isPrimary: false
-      }
-    ],
+    services: supaCustomer?.tjenester?.map((t: any) => ({
+      name: t.navn, status: t.status === 'active' ? 'Active' : 'Onboarding',
+      owner: 'Ola Nordmann', startDate: '—', monthlyValue: t.pris_per_mnd || 0
+    })) || [],
+    contacts: supaCustomer?.kontakter?.map((k: any) => ({
+      name: k.navn, title: k.tittel, email: k.epost, phone: k.telefon, isPrimary: k.er_primaer
+    })) || [],
     activities: [
       { type: 'meeting', title: 'Oppstartsmøte planlagt', description: 'SEO oppstartsmøte med Maria', date: 'I morgen 10:00', user: 'Ola Nordmann' },
       { type: 'note', title: 'Intern note', description: 'Kunden er svært interessert i å se resultater raskt', date: '3 dager siden', user: 'Ola Nordmann' },
