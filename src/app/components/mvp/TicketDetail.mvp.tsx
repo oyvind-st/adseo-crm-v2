@@ -27,8 +27,17 @@ export function TicketDetailMVP() {
   const [supaTicket, setSupaTicket] = useState<any>(null);
   const [supaLoading, setSupaLoading] = useState(true);
   const [conversation, setConversation] = useState<any[]>([]);
+  const [supaCustomers, setSupaCustomers] = useState<{ id: string; name: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load all customers for the dropdown
+  useEffect(() => {
+    supabase.from('kunder').select('id, bedriftsnavn').order('bedriftsnavn')
+      .then(({ data }) => {
+        if (data) setSupaCustomers(data.map(k => ({ id: k.id, name: k.bedriftsnavn })));
+      });
+  }, []);
 
   // Fetch real ticket from Supabase
   useEffect(() => {
@@ -112,26 +121,19 @@ export function TicketDetailMVP() {
 
   const teamMembers = ['Ola Nordmann', 'Kari Jensen', 'Per Hansen', 'Nina Olsen'];
 
-  const customers = [
-    { id: '1', name: 'Nordic Tech AS' },
-    { id: '2', name: 'Green Energy Norway' },
-    { id: '3', name: 'Retail Solutions' },
-    { id: '4', name: 'Tech Startup AS' },
-    { id: '5', name: 'Media Group AS' },
-    { id: '6', name: 'E-commerce Pro AS' },
-    { id: '7', name: 'Travel Group' }
-  ];
-
-  const filteredCustomers = customers.filter((customer) =>
+  const filteredCustomers = supaCustomers.filter((customer) =>
     customer.name.toLowerCase().includes(customerSearchQuery.toLowerCase())
   );
 
-  const selectedCustomer = customers.find((c) => c.id === currentCustomerId);
+  const selectedCustomer = supaCustomers.find((c) => c.id === currentCustomerId);
 
-  const handleSelectCustomer = (customerId: string) => {
+  const handleSelectCustomer = async (customerId: string) => {
     setCurrentCustomerId(customerId);
     setShowCustomerSearch(false);
     setCustomerSearchQuery('');
+    if (ticket) {
+      await supabase.from('tickets').update({ kunde_id: customerId }).eq('id', ticket.id);
+    }
   };
 
   const templates = [
@@ -405,9 +407,15 @@ export function TicketDetailMVP() {
                     onClick={() => setShowCustomerSearch(!showCustomerSearch)}
                     className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center gap-2"
                   >
-                    <Building2 className="w-4 h-4 text-slate-400" />
-                    <span className="flex-1">{selectedCustomer ? selectedCustomer.name : 'Velg kunde...'}</span>
-                    <Search className="w-4 h-4 text-slate-400" />
+                    <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="flex-1 truncate">
+                      {selectedCustomer
+                        ? selectedCustomer.name
+                        : supaTicket?.kunder?.bedriftsnavn
+                        ? supaTicket.kunder.bedriftsnavn
+                        : <span className="text-slate-400">Velg kunde...</span>}
+                    </span>
+                    <Search className="w-4 h-4 text-slate-400 shrink-0" />
                   </button>
                   {showCustomerSearch && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-64 overflow-hidden flex flex-col">
@@ -425,21 +433,31 @@ export function TicketDetailMVP() {
                         </div>
                       </div>
                       <div className="overflow-y-auto max-h-48">
-                        {filteredCustomers.length > 0 ? (
-                          filteredCustomers.map((customer) => (
-                            <button
-                              key={customer.id}
-                              onClick={() => handleSelectCustomer(customer.id)}
-                              className={`w-full px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
-                                currentCustomerId === customer.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                              }`}
-                            >
-                              <p className="text-sm font-medium text-slate-900 dark:text-white">{customer.name}</p>
-                            </button>
-                          ))
+                        {supaCustomers.length === 0 ? (
+                          <div className="px-3 py-4 text-center text-sm text-slate-400">Laster kunder...</div>
+                        ) : filteredCustomers.length > 0 ? (
+                          filteredCustomers.map((customer) => {
+                            const isSelected = currentCustomerId === customer.id ||
+                              (!currentCustomerId && supaTicket?.kunder?.id === customer.id);
+                            return (
+                              <button
+                                key={customer.id}
+                                onClick={() => handleSelectCustomer(customer.id)}
+                                className={`w-full px-3 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-2 ${
+                                  isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                                }`}
+                              >
+                                <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                                <span className={`text-sm font-medium ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white'}`}>
+                                  {customer.name}
+                                </span>
+                                {isSelected && <span className="ml-auto text-xs text-blue-500">✓</span>}
+                              </button>
+                            );
+                          })
                         ) : (
                           <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
-                            Ingen kunder funnet
+                            Ingen kunder funnet for «{customerSearchQuery}»
                           </div>
                         )}
                       </div>
