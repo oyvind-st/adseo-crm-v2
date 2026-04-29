@@ -441,22 +441,28 @@ export function CustomerDetailMVP() {
   // Filter for regular tasks only (non-delivery tasks)
   const regularTasks = customerTasks.filter(t => t.taskType === 'regular');
 
-  const [notes, setNotes] = useState([
-    {
-      id: '1',
-      content: 'Kunden er svært interessert i å se resultater raskt. Har nevnt at de har hatt dårlig erfaring med tidligere byrå. Viktig å følge opp tett og vise resultater kontinuerlig.',
-      author: 'Ola Nordmann',
-      date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-      attachments: []
-    },
-    {
-      id: '2',
-      content: 'Oppdatering fra oppstartsmøte: Kunden ønsker å fokusere på lokal SEO først. De har en fysisk butikk i Oslo sentrum som ikke får nok trafikk.',
-      author: 'Kari Jensen',
-      date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-      attachments: []
-    }
-  ]);
+  const [notes, setNotes] = useState<any[]>([]);
+
+  // Load notes from Supabase
+  useEffect(() => {
+    if (!id) return;
+    supabase.from('aktivitetslogg')
+      .select('*')
+      .eq('kunde_id', id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (data) {
+          setNotes(data.map(n => ({
+            id: n.id,
+            content: n.beskrivelse || n.tittel,
+            author: n.utfort_av || 'Ola Nordmann',
+            date: new Date(n.created_at),
+            type: n.type,
+            attachments: []
+          })));
+        }
+      });
+  }, [id]);
 
   const [newNote, setNewNote] = useState({ content: '', attachments: [] as File[] });
   const [showAddContact, setShowAddContact] = useState(false);
@@ -508,7 +514,17 @@ export function CustomerDetailMVP() {
       attachments: []
     };
 
-    setNotes([newNoteData, ...notes]);
+    // Save to Supabase
+    supabase.from('aktivitetslogg').insert({
+      kunde_id: id,
+      type: quickLogData.activityType || 'notat',
+      tittel: quickLogData.activityType || 'Aktivitet',
+      beskrivelse: quickLogData.note,
+      utfort_av: customer.owner
+    }).then(({ data }) => {
+      if (data) setNotes([{ ...newNoteData, id: data[0]?.id || newNoteData.id }, ...notes]);
+      else setNotes([newNoteData, ...notes]);
+    });
 
     if (quickLogData.createFollowUp && quickLogData.followUpTitle) {
       const newTask = {
@@ -539,18 +555,29 @@ export function CustomerDetailMVP() {
     alert('Aktivitet logget!');
   };
 
-  const handleAddNote = () => {
+  const handleAddNote = async () => {
     if (!newNote.content.trim()) return;
 
-    const note = {
-      id: Date.now().toString(),
-      content: newNote.content,
-      author: customer.owner,
-      date: new Date(),
-      attachments: []
-    };
+    // Save to Supabase
+    const { data, error } = await supabase.from('aktivitetslogg').insert({
+      kunde_id: id,
+      type: 'notat',
+      tittel: 'Internt notat',
+      beskrivelse: newNote.content,
+      utfort_av: 'Ola Nordmann'
+    }).select().single();
 
-    setNotes([note, ...notes]);
+    if (!error && data) {
+      const note = {
+        id: data.id,
+        content: data.beskrivelse,
+        author: data.utfort_av,
+        date: new Date(data.created_at),
+        type: data.type,
+        attachments: []
+      };
+      setNotes([note, ...notes]);
+    }
     setNewNote({ content: '', attachments: [] });
   };
 
