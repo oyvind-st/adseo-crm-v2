@@ -558,27 +558,36 @@ export function CustomerDetailMVP() {
   const handleAddNote = async () => {
     if (!newNote.content.trim()) return;
 
+    const contentToSave = newNote.content;
+    setNewNote({ content: '', attachments: [] }); // Clear input immediately
+
     // Save to Supabase
     const { data, error } = await supabase.from('aktivitetslogg').insert({
       kunde_id: id,
       type: 'notat',
       tittel: 'Internt notat',
-      beskrivelse: newNote.content,
+      beskrivelse: contentToSave,
       utfort_av: 'Ola Nordmann'
     }).select().single();
 
-    if (!error && data) {
+    if (error) {
+      console.error('Failed to save note:', error);
+      alert('Kunne ikke lagre notatet. Prøv igjen.');
+      return;
+    }
+
+    if (data) {
       const note = {
         id: data.id,
         content: data.beskrivelse,
-        author: data.utfort_av,
-        date: new Date(data.created_at),
+        author: data.utfort_av || 'Ola Nordmann',
+        date: new Date(data.created_at || Date.now()),
         type: data.type,
         attachments: []
       };
-      setNotes([note, ...notes]);
+      // Use functional update to avoid stale closure
+      setNotes(prev => [note, ...prev]);
     }
-    setNewNote({ content: '', attachments: [] });
   };
 
   const getHealthColor = (status: string) => {
@@ -1690,7 +1699,7 @@ export function CustomerDetailMVP() {
                     <div className="flex items-center gap-2 mt-3 text-xs text-slate-500 dark:text-slate-400">
                       <span>{note.author}</span>
                       <span>•</span>
-                      <span>{note.date.toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                      <span>{note.date instanceof Date && !isNaN(note.date.getTime()) ? note.date.toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Akkurat nå'}</span>
                     </div>
                   </div>
                 ))}
