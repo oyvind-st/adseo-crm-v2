@@ -60,7 +60,7 @@ export function TicketListMVP() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-medium text-gray-900">{t.kontakter?.navn||'Ukjent'}</span>
+                  <span className="text-sm font-medium text-gray-900">{t.kontakter?.navn || t.kunder?.bedriftsnavn || 'Ukjent'}</span>
                   {t.prioritet==='høy'&&<span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full">Høy prioritet</span>}
                 </div>
                 <div className="text-sm text-gray-700 mb-1">{t.tittel}</div>
