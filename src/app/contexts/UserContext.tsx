@@ -83,27 +83,50 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    const init = async () => {
+    // Read session directly from localStorage — instant, no API calls, no lock issues
+    const readSessionFromStorage = () => {
       try {
-        // Direct session check — reliable, no lock issues
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!mounted) return;
-        if (session?.user) {
-          await loadProfile(session.user);
+        const key = `sb-wqjomkmlgtuuhlkghnfr-auth-token`;
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        // Check if access token exists and is not expired
+        if (data?.access_token && data?.expires_at) {
+          const expiresAt = data.expires_at * 1000;
+          if (Date.now() < expiresAt) {
+            return data;
+          }
         }
-      } catch (e) {
-        console.error('Session check failed:', e);
-      } finally {
-        if (mounted) setLoading(false);
+        return null;
+      } catch {
+        return null;
       }
     };
 
-    init();
+    const session = readSessionFromStorage();
 
-    // Also listen for future auth changes (login/logout in other tabs)
+    if (session?.user) {
+      // We have a valid session — set user immediately from token data
+      const u = session.user;
+      setUser({
+        id: u.id,
+        navn: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Bruker',
+        epost: u.email || '',
+        rolle: u.user_metadata?.rolle || 'selger',
+        status: 'active',
+      });
+      setLoading(false);
+
+      // Then load full profile from DB in background (non-blocking)
+      loadProfile(u).catch(console.error);
+    } else {
+      setLoading(false);
+    }
+
+    // Listen for auth changes between tabs and after login
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
-      if (event === 'SIGNED_IN' && session?.user) {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
         await loadProfile(session.user);
         setLoading(false);
       } else if (event === 'SIGNED_OUT') {
