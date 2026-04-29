@@ -83,26 +83,37 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    // Use only onAuthStateChange — avoids lock conflicts with getSession()
-    // INITIAL_SESSION fires immediately with current session (or null)
+    const init = async () => {
+      try {
+        // Direct session check — reliable, no lock issues
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!mounted) return;
+        if (session?.user) {
+          await loadProfile(session.user);
+        }
+      } catch (e) {
+        console.error('Session check failed:', e);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    init();
+
+    // Also listen for future auth changes (login/logout in other tabs)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
-      if (session?.user) {
+      if (event === 'SIGNED_IN' && session?.user) {
         await loadProfile(session.user);
-      } else {
+        setLoading(false);
+      } else if (event === 'SIGNED_OUT') {
         setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
-
-    // Safety fallback — if onAuthStateChange never fires within 3 seconds
-    const timeout = setTimeout(() => {
-      if (mounted) setLoading(false);
-    }, 3000);
 
     return () => {
       mounted = false;
-      clearTimeout(timeout);
       subscription.unsubscribe();
     };
   }, []);
