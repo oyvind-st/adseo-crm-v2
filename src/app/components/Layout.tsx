@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { useMVPMode } from '../contexts/MVPContext';
+import { useCurrentUser } from '../contexts/UserContext';
 
 export function Layout() {
   const location = useLocation();
@@ -32,6 +33,7 @@ export function Layout() {
   const [searchQuery, setSearchQuery] = useState('');
   const { isDarkMode, toggleDarkMode } = useDarkMode();
   const { isMVPMode, toggleMVPMode } = useMVPMode();
+  const { user, signOut } = useCurrentUser();
 
   const isActive = (path: string) => {
     return location.pathname === path || location.pathname.startsWith(path + '/');
@@ -272,13 +274,16 @@ export function Layout() {
 
         <div className="p-4 border-t border-slate-200 dark:border-slate-700">
           <div className="flex items-center gap-3 px-4 py-2">
-            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-              <User className="w-4 h-4 text-blue-700 dark:text-blue-400" />
+            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-700 dark:text-blue-400">
+              {user?.navn ? user.navn.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() : <User className="w-4 h-4" />}
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-slate-900 dark:text-white">Ola Nordmann</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Kundeansvarlig</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{user?.navn || 'Bruker'}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user?.rolle || 'selger'}</p>
             </div>
+            <button onClick={signOut} title="Logg ut" className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </button>
           </div>
         </div>
       </div>

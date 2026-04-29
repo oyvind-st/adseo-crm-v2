@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
+import { useCurrentUser } from '../contexts/UserContext';
 import {
   Users,
   Shield,
@@ -38,49 +40,57 @@ export function Settings() {
     permissions: [] as string[]
   });
 
-  // TODO: Backend - Fetch users from database
-  const [users, setUsers] = useState([
-    {
-      id: '1',
-      name: 'Ola Nordmann',
-      email: 'ola@adseo.no',
-      phone: '+47 123 45 678',
-      role: 'admin',
-      status: 'active',
-      lastLogin: '2 timer siden',
-      created: '15. januar 2024'
-    },
-    {
-      id: '2',
-      name: 'Kari Jensen',
-      email: 'kari@adseo.no',
-      phone: '+47 234 56 789',
-      role: 'salgssjef',
-      status: 'active',
-      lastLogin: '5 minutter siden',
-      created: '20. januar 2024'
-    },
-    {
-      id: '3',
-      name: 'Per Hansen',
-      email: 'per@adseo.no',
-      phone: '+47 345 67 890',
-      role: 'selger',
-      status: 'active',
-      lastLogin: '1 dag siden',
-      created: '1. februar 2024'
-    },
-    {
-      id: '4',
-      name: 'Nina Olsen',
-      email: 'nina@adseo.no',
-      phone: '+47 456 78 901',
-      role: 'marketing',
-      status: 'active',
-      lastLogin: '3 dager siden',
-      created: '10. februar 2024'
-    }
-  ]);
+  const { user: currentUser, signOut, updateProfile } = useCurrentUser();
+  const [users, setUsers] = useState<any[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('selger');
+  const [inviting, setInviting] = useState(false);
+
+  // Load users from Supabase profiles
+  useEffect(() => {
+    supabase.from('profiles').select('*').order('created_at')
+      .then(({ data }) => {
+        if (data) setUsers(data.map(u => ({
+          id: u.id,
+          name: u.navn || u.epost?.split('@')[0] || '—',
+          email: u.epost || '',
+          phone: u.telefon || '',
+          role: u.rolle || 'selger',
+          status: u.status || 'active',
+          lastLogin: u.sist_innlogget ? new Date(u.sist_innlogget).toLocaleDateString('no-NO') : 'Aldri',
+          created: u.created_at ? new Date(u.created_at).toLocaleDateString('no-NO') : '—'
+        })));
+        setUsersLoading(false);
+      });
+  }, []);
+
+  const handleInviteUser = async () => {
+    if (!inviteEmail.trim()) return;
+    setInviting(true);
+    // Send magic link invite via Supabase Auth
+    const { error } = await supabase.auth.admin?.inviteUserByEmail
+      ? await (supabase.auth as any).admin.inviteUserByEmail(inviteEmail, { data: { rolle: inviteRole } })
+      : { error: { message: 'Invitasjon sendes via e-post.' } };
+
+    // Since we don't have admin key, create profile + show instructions
+    const tempId = crypto.randomUUID();
+    await supabase.from('profiles').insert({
+      id: tempId,
+      epost: inviteEmail,
+      navn: inviteEmail.split('@')[0],
+      rolle: inviteRole,
+      status: 'invitert'
+    });
+
+    alert(\`Invitasjon forberedt for \${inviteEmail}. Be dem om å registrere seg på adseo-crm-v2.vercel.app.\`);
+    setInviteEmail('');
+    setInviting(false);
+
+    // Reload users
+    const { data } = await supabase.from('profiles').select('*').order('created_at');
+    if (data) setUsers(data.map(u => ({ id: u.id, name: u.navn || u.epost?.split('@')[0] || '—', email: u.epost || '', phone: u.telefon || '', role: u.rolle || 'selger', status: u.status || 'active', lastLogin: u.sist_innlogget ? new Date(u.sist_innlogget).toLocaleDateString('no-NO') : 'Aldri', created: u.created_at ? new Date(u.created_at).toLocaleDateString('no-NO') : '—' })));
+  };
 
   // TODO: Backend - Fetch roles from database
   const [roles, setRoles] = useState([
@@ -194,12 +204,20 @@ export function Settings() {
   const handleDeleteUser = (userId: string) => {
     // TODO: Backend - Delete user from database
     if (confirm('Er du sikker på at du vil slette denne brukeren?')) {
+      await supabase.from('profiles').delete().eq('id', userId);
       setUsers(users.filter(u => u.id !== userId));
     }
   };
 
   const handleEditUser = () => {
     // TODO: Backend - Update user in database
+    await supabase.from('profiles').update({
+      navn: selectedUser.name,
+      epost: selectedUser.email,
+      telefon: selectedUser.phone,
+      rolle: selectedUser.role,
+      status: selectedUser.status
+    }).eq('id', selectedUser.id);
     setUsers(users.map(u => u.id === selectedUser.id ? selectedUser : u));
     setShowEditUserModal(false);
     setSelectedUser(null);
