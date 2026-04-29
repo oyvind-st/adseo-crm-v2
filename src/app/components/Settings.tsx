@@ -68,22 +68,23 @@ export function Settings() {
   const handleInviteUser = async () => {
     if (!inviteEmail.trim()) return;
     setInviting(true);
-    // Send magic link invite via Supabase Auth
-    const { error } = await supabase.auth.admin?.inviteUserByEmail
-      ? await (supabase.auth as any).admin.inviteUserByEmail(inviteEmail, { data: { rolle: inviteRole } })
-      : { error: { message: 'Invitasjon sendes via e-post.' } };
 
-    // Since we don't have admin key, create profile + show instructions
-    const tempId = crypto.randomUUID();
-    await supabase.from('profiles').insert({
-      id: tempId,
-      epost: inviteEmail,
-      navn: inviteEmail.split('@')[0],
-      rolle: inviteRole,
-      status: 'invitert'
+    // Send magic link — creates user in Supabase Auth if not exists
+    const { error } = await supabase.auth.signInWithOtp({
+      email: inviteEmail,
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: window.location.origin,
+        data: { rolle: inviteRole }
+      }
     });
 
-    alert('Invitasjon forberedt for ' + inviteEmail + '. Be dem om å registrere seg på adseo-crm-v2.vercel.app.');
+    if (error) {
+      alert('Feil ved sending av invitasjon: ' + error.message);
+    } else {
+      alert('Invitasjon sendt til ' + inviteEmail + '! De mottar en e-post med innloggingslenke.');
+    }
+
     setInviteEmail('');
     setInviting(false);
 
