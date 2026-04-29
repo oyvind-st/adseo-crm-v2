@@ -1,21 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Plus, Ticket, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
-import { StatCard } from '../shared'
+import { StatCard, TicketRow } from '../shared'
 
-// Status tabs — same pattern as TaskList
 const TABS = [
   { key: 'apent',           label: 'Åpne saker' },
   { key: 'pagar',           label: 'Pågår' },
   { key: 'venter_pa_kunde', label: 'Venter på kunde' },
   { key: 'lukket',          label: 'Lukket' },
 ]
-
-const PRIORITY_COLORS: Record<string, string> = {
-  høy:    'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  medium: 'bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-  lav:    'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
-}
 
 export function TicketListMVP() {
   const [tickets, setTickets] = useState<any[]>([])
@@ -32,16 +25,9 @@ export function TicketListMVP() {
   const tabTickets = tickets.filter(t => t.status === activeTab)
   const counts = Object.fromEntries(TABS.map(t => [t.key, tickets.filter(x => x.status === t.key).length]))
 
-  const timeAgo = (d: string) => {
-    const h = Math.floor((Date.now() - new Date(d).getTime()) / 3600000)
-    if (h < 1) return 'Akkurat nå'
-    if (h < 24) return `${h}t siden`
-    return `${Math.floor(h / 24)}d siden`
-  }
-
   return (
     <div className="p-6 space-y-6">
-      {/* Header — same as TaskList */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Tickets</h1>
@@ -55,7 +41,7 @@ export function TicketListMVP() {
         </button>
       </div>
 
-      {/* Stats — same pattern as TaskList */}
+      {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard label="Åpne tickets" value={tickets.filter(t => t.status === 'apent').length}
           icon={<Ticket className="w-5 h-5 text-green-600 dark:text-green-400" />}
@@ -71,10 +57,9 @@ export function TicketListMVP() {
           iconColor="bg-blue-50 dark:bg-blue-900/30" />
       </div>
 
-      {/* Tab + list — exactly same structure as TaskList */}
+      {/* Tabs — separate container */}
       <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-        {/* Tabs */}
-        <div className="flex border-b border-slate-200 dark:border-slate-700">
+        <div className="flex">
           {TABS.map(tab => (
             <button
               key={tab.key}
@@ -98,62 +83,23 @@ export function TicketListMVP() {
             </button>
           ))}
         </div>
+      </div>
 
-        {/* Ticket rows */}
+      {/* Ticket list — separate container below tabs */}
+      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
         {loading ? (
           <div className="p-10 text-center text-sm text-slate-400 dark:text-slate-500">Laster tickets...</div>
         ) : tabTickets.length === 0 ? (
           <div className="p-10 text-center text-sm text-slate-400 dark:text-slate-500">
             Ingen {TABS.find(t => t.key === activeTab)?.label.toLowerCase()} her
           </div>
-        ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {tabTickets.map(t => (
-              <div key={t.id} className="flex items-start gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer">
-                {/* Avatar */}
-                <div className="w-9 h-9 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5">
-                  {(t.kontakter?.navn || t.kunder?.bedriftsnavn || '?').slice(0, 2).toUpperCase()}
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-sm font-medium text-slate-900 dark:text-white">
-                      {t.kontakter?.navn || t.kunder?.bedriftsnavn || 'Ukjent'}
-                    </span>
-                    {t.prioritet === 'høy' && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">
-                        Høy prioritet
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-slate-700 dark:text-slate-300 mb-1">{t.tittel}</p>
-                  {t.beskrivelse && (
-                    <p className="text-xs text-slate-400 truncate max-w-xl mb-1.5">{t.beskrivelse}</p>
-                  )}
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
-                    {t.kunder?.bedriftsnavn && (
-                      <span className="font-medium text-slate-500 dark:text-slate-400">{t.kunder.bedriftsnavn}</span>
-                    )}
-                    {t.kategori && (
-                      <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full text-slate-500 dark:text-slate-400">
-                        {t.kategori}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Right side */}
-                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                  <span className="text-xs text-slate-400">{timeAgo(t.created_at)}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[t.prioritet] || PRIORITY_COLORS.lav}`}>
-                    {t.prioritet === 'høy' ? 'Høy' : t.prioritet === 'medium' ? 'Medium' : 'Lav'}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        ) : tabTickets.map((t, i) => (
+          <TicketRow
+            key={t.id}
+            {...t}
+            last={i === tabTickets.length - 1}
+          />
+        ))}
       </div>
     </div>
   )
