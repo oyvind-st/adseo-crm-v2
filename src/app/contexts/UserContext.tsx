@@ -15,151 +15,85 @@ interface UserContextType {
   user: UserProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signOut: () => Promise<void>;
-  updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  signOut: () => void;
+  updateProfile: (updates: Partial<UserProfile>) => void;
 }
 
 const UserContext = createContext<UserContextType>({
   user: null,
-  loading: true,
+  loading: false,
   signIn: async () => ({ error: null }),
-  signOut: async () => {},
-  updateProfile: async () => {},
+  signOut: () => {},
+  updateProfile: () => {},
 });
 
+const SESSION_KEY = 'sb-wqjomkmlgtuuhlkghnfr-auth-token';
+
+function readSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data?.user && data?.expires_at && data.expires_at * 1000 > Date.now()) {
+      return data;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const session = readSession();
 
-  const loadProfile = async (authUser: { id: string; email?: string }) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .single();
+  const [user, setUser] = useState<UserProfile | null>(
+    session?.user ? {
+      id: session.user.id,
+      navn: session.user.email?.split('@')[0] || 'Bruker',
+      epost: session.user.email || '',
+      rolle: 'selger',
+      status: 'active',
+    } : null
+  );
+  const [loading] = useState(false);
 
-      if (data) {
-        setUser({
-          id: data.id,
-          navn: data.navn || authUser.email?.split('@')[0] || 'Bruker',
-          epost: data.epost || authUser.email || '',
-          telefon: data.telefon,
-          rolle: data.rolle || 'selger',
-          status: data.status || 'active',
-          avatar_initials: data.avatar_initials,
-        });
-      } else {
-        // Profile doesn't exist yet — create it from auth user
-        const navn = authUser.email?.split('@')[0] || 'Bruker';
-        await supabase.from('profiles').upsert({
-          id: authUser.id,
-          epost: authUser.email || '',
-          navn,
-          rolle: 'selger',
-          status: 'active',
-        });
-        setUser({
-          id: authUser.id,
-          navn,
-          epost: authUser.email || '',
-          rolle: 'selger',
-          status: 'active',
-        });
-      }
-    } catch (err) {
-      console.error('loadProfile error:', err);
-      // Still allow access even if profile load fails
-      setUser({
-        id: authUser.id,
-        navn: authUser.email?.split('@')[0] || 'Bruker',
-        epost: authUser.email || '',
-        rolle: 'selger',
-        status: 'active',
-      });
-    }
-  };
-
+  // Load real profile from DB in background (non-blocking, won't affect data loading)
   useEffect(() => {
-    let mounted = true;
-
-    // Read session directly from localStorage — instant, no API calls, no lock issues
-    const readSessionFromStorage = () => {
-      try {
-        const key = `sb-wqjomkmlgtuuhlkghnfr-auth-token`;
-        const raw = localStorage.getItem(key);
-        if (!raw) return null;
-        const data = JSON.parse(raw);
-        // Check if access token exists and is not expired
-        if (data?.access_token && data?.expires_at) {
-          const expiresAt = data.expires_at * 1000;
-          if (Date.now() < expiresAt) {
-            return data;
-          }
+    if (!session?.user?.id) return;
+    supabase.from('profiles').select('*').eq('id', session.user.id).single()
+      .then(({ data }) => {
+        if (data) {
+          setUser(prev => prev ? {
+            ...prev,
+            navn: data.navn || prev.navn,
+            rolle: data.rolle || prev.rolle,
+            telefon: data.telefon,
+            avatar_initials: data.avatar_initials,
+          } : prev);
         }
-        return null;
-      } catch {
-        return null;
-      }
-    };
-
-    const session = readSessionFromStorage();
-
-    if (session?.access_token && session?.refresh_token && session?.user) {
-      // Set user immediately from localStorage — no API calls, no lock conflicts
-      const u = session.user;
-      setUser({
-        id: u.id,
-        navn: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Bruker',
-        epost: u.email || '',
-        rolle: u.user_metadata?.rolle || 'selger',
-        status: 'active',
-      });
-      setLoading(false);
-
-      // Load full profile from DB to get correct role etc.
-      loadProfile(u).catch(console.error);
-    } else {
-      setLoading(false);
-    }
-
-    // Listen for auth changes between tabs and after login
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
-        await loadProfile(session.user);
-        setLoading(false);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+      })
+      .catch(() => {}); // Silently ignore errors
   }, []);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
+    // Reload page so readSession() picks up new token
+    window.location.href = '/';
     return { error: null };
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
+  const signOut = () => {
+    // Clear auth data and reload
+    localStorage.removeItem(SESSION_KEY);
+    supabase.auth.signOut().catch(() => {});
+    window.location.href = '/';
   };
 
-  const updateProfile = async (updates: Partial<UserProfile>) => {
+  const updateProfile = (updates: Partial<UserProfile>) => {
     if (!user) return;
-    try {
-      const { data } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single();
-      if (data) setUser({ ...user, ...data });
-    } catch (err) {
-      console.error('updateProfile error:', err);
-    }
+    setUser({ ...user, ...updates });
+    supabase.from('profiles').update(updates).eq('id', user.id).catch(() => {});
   };
 
   return (
