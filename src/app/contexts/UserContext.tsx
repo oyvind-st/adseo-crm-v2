@@ -84,9 +84,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = () => {
-    // Clear auth data and reload
-    localStorage.removeItem(SESSION_KEY);
-    supabase.auth.signOut().catch(() => {});
+    // Clear ALL Supabase auth data from localStorage without calling Supabase API
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('sb-') || k.includes('supabase'))
+      .forEach(k => localStorage.removeItem(k));
     window.location.href = '/';
   };
 
