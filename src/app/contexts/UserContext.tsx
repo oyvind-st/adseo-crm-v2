@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '../../lib/supabase';
+import { supabase, isFromMagicLink } from '../../lib/supabase';
 
 interface UserProfile {
   id: string;
@@ -14,6 +14,8 @@ interface UserProfile {
 interface UserContextType {
   user: UserProfile | null;
   loading: boolean;
+  isFirstLogin: boolean;
+  clearFirstLogin: () => void;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => void;
   updateProfile: (updates: Partial<UserProfile>) => void;
@@ -22,6 +24,8 @@ interface UserContextType {
 const UserContext = createContext<UserContextType>({
   user: null,
   loading: false,
+  isFirstLogin: false,
+  clearFirstLogin: () => {},
   signIn: async () => ({ error: null }),
   signOut: () => {},
   updateProfile: () => {},
@@ -56,6 +60,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } : null
   );
   const [loading] = useState(false);
+  const [isFirstLogin, setIsFirstLogin] = useState(isFromMagicLink);
+
+  const clearFirstLogin = () => {
+    setIsFirstLogin(false);
+    // Clean the URL hash so reloads don't re-trigger this
+    window.history.replaceState(null, '', window.location.pathname);
+  };
 
   // Load real profile from DB in background (non-blocking, won't affect data loading)
   useEffect(() => {
@@ -98,7 +109,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <UserContext.Provider value={{ user, loading, signIn, signOut, updateProfile }}>
+    <UserContext.Provider value={{ user, loading, isFirstLogin, clearFirstLogin, signIn, signOut, updateProfile }}>
       {children}
     </UserContext.Provider>
   );

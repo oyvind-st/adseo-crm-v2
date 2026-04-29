@@ -767,6 +767,17 @@ export function Settings() {
               </button>
             </div>
           </div>
+
+          {/* Endre passord */}
+          <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+              <h2 className="font-semibold text-slate-900 dark:text-white">Endre passord</h2>
+              <p className="text-sm text-slate-500 mt-0.5">Sett eller oppdater ditt passord</p>
+            </div>
+            <div className="p-6">
+              <ChangePasswordForm />
+            </div>
+          </div>
         </div>
       )}
 
@@ -983,5 +994,51 @@ export function Settings() {
         </div>
       )}
     </div>
+  );
+}
+
+
+function ChangePasswordForm() {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const handleChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) { setMsg('Passordet må være minst 6 tegn'); return; }
+    if (newPassword !== confirm) { setMsg('Passordene stemmer ikke overens'); return; }
+    setSaving(true); setMsg('');
+    const { supabase: client } = await import('../../lib/supabase');
+    const { error } = await client.auth.updateUser({ password: newPassword });
+    if (error) setMsg('Feil: ' + error.message);
+    else { setMsg('Passord oppdatert ✓'); setNewPassword(''); setConfirm(''); }
+    setSaving(false);
+  };
+
+  return (
+    <form onSubmit={handleChange} className="space-y-4">
+      {msg && (
+        <div className={`text-sm rounded-lg px-4 py-3 ${
+          msg.includes('Feil') || msg.includes('stemmer') || msg.includes('minst')
+            ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+            : 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+        }`}>{msg}</div>
+      )}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nytt passord</label>
+        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+          placeholder="Min. 6 tegn" className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Bekreft passord</label>
+        <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
+          placeholder="Gjenta nytt passord" className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <button type="submit" disabled={saving}
+        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50">
+        {saving ? 'Lagrer...' : 'Oppdater passord'}
+      </button>
+    </form>
   );
 }

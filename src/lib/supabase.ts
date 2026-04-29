@@ -3,11 +3,17 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+// Detect magic link callback BEFORE Supabase processes and clears the URL hash
+export const isFromMagicLink =
+  typeof window !== 'undefined' &&
+  window.location.hash.includes('access_token') &&
+  window.location.hash.includes('type=magiclink');
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: false,    // Prevents lock conflicts on startup
-    detectSessionInUrl: false,  // No URL token detection needed
+    detectSessionInUrl: true,   // Needed for magic link callbacks
   }
 })
 

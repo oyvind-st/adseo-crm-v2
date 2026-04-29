@@ -4,6 +4,7 @@ import { MVPProvider } from './contexts/MVPContext'
 import { UserProvider, useCurrentUser } from './contexts/UserContext'
 import { Layout } from './components/Layout'
 import { Login } from './components/Login'
+import { SetPasswordModal } from './components/SetPasswordModal'
 
 // Full Figma components with Supabase
 import { Dashboard } from './components/Dashboard'
@@ -22,7 +23,7 @@ import { DesignSystemMVP } from './components/mvp/DesignSystem.mvp'
 
 // Auth guard — shows login if not authenticated
 function AppRoutes() {
-  const { user, loading } = useCurrentUser()
+  const { user, loading, isFirstLogin } = useCurrentUser()
 
   if (loading) return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
@@ -34,6 +35,7 @@ function AppRoutes() {
 
   return (
     <BrowserRouter>
+      {isFirstLogin && <SetPasswordModal />}
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
