@@ -83,7 +83,7 @@ export function Settings() {
       status: 'invitert'
     });
 
-    alert(\`Invitasjon forberedt for \${inviteEmail}. Be dem om å registrere seg på adseo-crm-v2.vercel.app.\`);
+    alert('Invitasjon forberedt for ' + inviteEmail + '. Be dem om å registrere seg på adseo-crm-v2.vercel.app.');
     setInviteEmail('');
     setInviting(false);
 
