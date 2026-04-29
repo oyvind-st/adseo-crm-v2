@@ -3,6 +3,9 @@ import { DarkModeProvider } from './contexts/DarkModeContext'
 import { MVPProvider } from './contexts/MVPContext'
 import { Layout } from './components/Layout'
 
+// Full Figma components with Supabase
+import { Dashboard } from './components/Dashboard'
+import { TaskList } from './components/TaskList'
 // Supabase-connected MVP components
 import { DashboardMVP } from './components/mvp/Dashboard.mvp'
 import { CustomerListMVP } from './components/mvp/CustomerList.mvp'
@@ -21,16 +24,16 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Layout />}>
-              <Route index element={<DashboardMVP />} />
+              <Route index element={<Dashboard />} />
               <Route path="customers" element={<CustomerListMVP />} />
               <Route path="customers/:id" element={<CustomerDetailMVP />} />
-              <Route path="tasks" element={<TaskListMVP />} />
+              <Route path="tasks" element={<TaskList />} />
               <Route path="tickets" element={<TicketListMVP />} />
               <Route path="tickets/:id" element={<TicketDetailMVP />} />
               <Route path="leveranser" element={<LeveranserListMVP />} />
               <Route path="leads" element={<LeadListMVP />} />
               <Route path="settings" element={<SettingsMVP />} />
-              <Route path="*" element={<DashboardMVP />} />
+              <Route path="*" element={<Dashboard />} />
             </Route>
           </Routes>
         </BrowserRouter>
