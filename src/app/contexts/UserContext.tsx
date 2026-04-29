@@ -105,8 +105,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     const session = readSessionFromStorage();
 
-    if (session?.user) {
-      // We have a valid session — set user immediately from token data
+    if (session?.access_token && session?.refresh_token && session?.user) {
+      // Tell the Supabase client about the session so it uses the JWT for queries
+      supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      }).catch(console.error);
+
+      // Set user immediately so UI shows right away
       const u = session.user;
       setUser({
         id: u.id,
@@ -117,7 +123,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       });
       setLoading(false);
 
-      // Then load full profile from DB in background (non-blocking)
+      // Load full profile from DB to get correct role etc.
       loadProfile(u).catch(console.error);
     } else {
       setLoading(false);
