@@ -9,23 +9,24 @@ interface StatCardProps {
   loading?: boolean
 }
 
-export function StatCard({ label, value, icon, iconBg = '#f5f3ff', change, loading }: StatCardProps) {
+export function StatCard({ label, value, icon, iconBg, change, loading }: StatCardProps) {
   return (
-    <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-5 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">
-            {label}
-          </div>
-          <div className="text-3xl font-bold text-gray-900 tracking-tight leading-none">
-            {loading ? <span className="text-gray-200">—</span> : value}
-          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
+          <p className="text-2xl font-bold text-slate-900 dark:text-white mt-2 tracking-tight">
+            {loading ? <span className="text-slate-200 dark:text-slate-600">—</span> : value}
+          </p>
           {change && !loading && (
-            <div className="text-xs text-gray-400 mt-1.5">{change}</div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5">{change}</p>
           )}
         </div>
         {icon && (
-          <div className="p-2.5 rounded-xl flex-shrink-0" style={{ background: iconBg }}>
+          <div
+            className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={iconBg ? { background: iconBg } : undefined}
+          >
             {icon}
           </div>
         )}
