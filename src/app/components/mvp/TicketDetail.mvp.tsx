@@ -28,6 +28,9 @@ export function TicketDetailMVP() {
   const [supaLoading, setSupaLoading] = useState(true);
   const [conversation, setConversation] = useState<any[]>([]);
   const [supaCustomers, setSupaCustomers] = useState<{ id: string; name: string }[]>([]);
+  const [customerContacts, setCustomerContacts] = useState<any[]>([]);
+  const [relatedTicketsData, setRelatedTicketsData] = useState<any[]>([]);
+  const [customerActivityData, setCustomerActivityData] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -38,6 +41,40 @@ export function TicketDetailMVP() {
         if (data) setSupaCustomers(data.map(k => ({ id: k.id, name: k.bedriftsnavn })));
       });
   }, []);
+
+  // Reload customer-specific data whenever the linked customer changes
+  useEffect(() => {
+    if (!currentCustomerId) {
+      setCustomerContacts([]);
+      setRelatedTicketsData([]);
+      setCustomerActivityData([]);
+      return;
+    }
+
+    // Contacts for this customer
+    supabase.from('kontakter')
+      .select('id, navn, tittel, epost, telefon, er_primaer')
+      .eq('kunde_id', currentCustomerId)
+      .order('er_primaer', { ascending: false })
+      .then(({ data }) => { if (data) setCustomerContacts(data); });
+
+    // Other tickets for this customer (exclude current ticket)
+    supabase.from('tickets')
+      .select('id, tittel, status, created_at')
+      .eq('kunde_id', currentCustomerId)
+      .neq('id', id || '')
+      .order('created_at', { ascending: false })
+      .limit(5)
+      .then(({ data }) => { if (data) setRelatedTicketsData(data); });
+
+    // Recent activity: latest tasks for this customer
+    supabase.from('oppgaver')
+      .select('id, tittel, status, prioritet, frist, created_at')
+      .eq('kunde_id', currentCustomerId)
+      .order('created_at', { ascending: false })
+      .limit(5)
+      .then(({ data }) => { if (data) setCustomerActivityData(data); });
+  }, [currentCustomerId]);
 
   // Fetch real ticket from Supabase
   useEffect(() => {
@@ -707,11 +744,11 @@ export function TicketDetailMVP() {
                 Kundeinformasjon
               </h3>
                 {(() => {
-                  // Use the actively selected customer, falling back to the original ticket data
                   const displayName = selectedCustomer?.name || supaTicket?.kunder?.bedriftsnavn;
                   const displayId = currentCustomerId || supaTicket?.kunder?.id;
                   return (
-                    <div className="space-y-3 text-sm">
+                    <div className="space-y-4 text-sm">
+                      {/* Company */}
                       <div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Bedrift</p>
                         {displayId ? (
@@ -725,38 +762,82 @@ export function TicketDetailMVP() {
                           <p className="text-slate-400 italic text-xs">Ingen kunde koblet</p>
                         )}
                       </div>
-                      <div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Kontakt</p>
-                        <p className="text-slate-900 dark:text-white">{ticket.contact || '—'}</p>
-                        {ticket.contactEmail && (
-                          <p className="text-slate-600 dark:text-slate-400 text-xs mt-0.5">{ticket.contactEmail}</p>
-                        )}
-                      </div>
+                      {/* Contacts from customer */}
+                      {customerContacts.length > 0 && (
+                        <div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Kontaktpersoner</p>
+                          <div className="space-y-2">
+                            {customerContacts.map(c => (
+                              <div key={c.id} className="flex items-start gap-2">
+                                <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs font-semibold shrink-0 mt-0.5">
+                                  {c.navn?.charAt(0) || '?'}
+                                </div>
+                                <div>
+                                  <p className="font-medium text-slate-900 dark:text-white leading-tight">
+                                    {c.navn}
+                                    {c.er_primaer && <span className="ml-1 text-xs text-blue-500">(primær)</span>}
+                                  </p>
+                                  {c.tittel && <p className="text-xs text-slate-500 dark:text-slate-400">{c.tittel}</p>}
+                                  {c.epost && <p className="text-xs text-slate-500 dark:text-slate-400">{c.epost}</p>}
+                                  {c.telefon && <p className="text-xs text-slate-500 dark:text-slate-400">{c.telefon}</p>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {!displayId && (
+                        <p className="text-xs text-slate-400 italic">Velg en kunde for å se kontaktpersoner</p>
+                      )}
+                      {displayId && customerContacts.length === 0 && (
+                        <p className="text-xs text-slate-400 italic">Ingen kontaktpersoner registrert</p>
+                      )}
                     </div>
                   );
                 })()}
             </div>
 
-            {/* Activity Log */}
+            {/* Activity Log — recent tasks for this customer */}
             <div className="py-6 border-b border-slate-200 dark:border-slate-700">
               <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">
                 Aktivitetslogg
               </h3>
+              {customerActivityData.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">
+                  {currentCustomerId ? 'Ingen oppgaver registrert' : 'Velg en kunde for å se aktivitet'}
+                </p>
+              ) : (
                 <div className="space-y-3">
-                  {activityLog.map((activity) => (
-                    <div key={activity.id} className="flex gap-3">
-                      <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 flex-shrink-0"></div>
-                      <div className="flex-1">
-                        <p className="text-sm text-slate-900 dark:text-white">{activity.message}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-slate-500 dark:text-slate-400">{activity.user}</span>
-                          <span className="text-xs text-slate-400">•</span>
-                          <span className="text-xs text-slate-500 dark:text-slate-400">{activity.timestamp}</span>
+                  {customerActivityData.map((task) => {
+                    const statusColor = task.status === 'fullfort'
+                      ? 'bg-green-500'
+                      : task.status === 'pagar'
+                      ? 'bg-blue-500'
+                      : 'bg-slate-300 dark:bg-slate-600';
+                    const statusLabel = task.status === 'fullfort' ? 'Fullført'
+                      : task.status === 'pagar' ? 'Pågår' : 'Ikke startet';
+                    return (
+                      <div key={task.id} className="flex gap-3">
+                        <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${statusColor}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-slate-900 dark:text-white truncate">{task.tittel}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">{statusLabel}</span>
+                            {task.frist && (
+                              <>
+                                <span className="text-xs text-slate-400">•</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                  Frist: {new Date(task.frist).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })}
+                                </span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Related Tickets */}
@@ -764,28 +845,42 @@ export function TicketDetailMVP() {
               <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">
                 Relaterte tickets
               </h3>
+              {relatedTicketsData.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">
+                  {currentCustomerId ? 'Ingen andre tickets for denne kunden' : 'Velg en kunde for å se relaterte tickets'}
+                </p>
+              ) : (
                 <div className="space-y-2">
-                  {relatedTickets.map((related) => (
-                    <button
-                      key={related.id}
-                      onClick={() => navigate(`/tickets/${related.id}`)}
-                      className="w-full text-left p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-slate-900 dark:text-white">#{related.id}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          related.status === 'Closed'
-                            ? 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                            : 'bg-green-100 text-green-700'
-                        }`}>
-                          {related.status}
-                        </span>
-                      </div>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">{related.subject}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{related.date}</p>
-                    </button>
-                  ))}
-              </div>
+                  {relatedTicketsData.map((related) => {
+                    const statusLabel = related.status === 'apent' ? 'Åpen'
+                      : related.status === 'pagar' ? 'Pågår'
+                      : related.status === 'venter_pa_kunde' ? 'Venter'
+                      : 'Lukket';
+                    const statusClass = related.status === 'lukket'
+                      ? 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      : related.status === 'apent'
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                      : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
+                    return (
+                      <button
+                        key={related.id}
+                        onClick={() => navigate(`/tickets/${related.id}`)}
+                        className="w-full text-left p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                            {new Date(related.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded font-medium ${statusClass}`}>
+                            {statusLabel}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-700 dark:text-slate-300 leading-snug">{related.tittel}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Metadata */}
