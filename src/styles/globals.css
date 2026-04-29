@@ -1,0 +1,53 @@
+/* Dark mode overrides for MVP components */
+.dark .bg-white {
+  background-color: rgb(30 41 59) !important; /* slate-800 */
+}
+
+.dark .border-gray-100,
+.dark .border-gray-50 {
+  border-color: rgb(51 65 85) !important; /* slate-700 */
+}
+
+.dark .bg-gray-50 {
+  background-color: rgb(15 23 42) !important; /* slate-900 */
+}
+
+.dark .hover\:bg-gray-50:hover {
+  background-color: rgb(15 23 42) !important;
+}
+
+.dark .text-gray-900 {
+  color: rgb(248 250 252) !important; /* slate-50 */
+}
+
+.dark .text-gray-700 {
+  color: rgb(203 213 225) !important; /* slate-300 */
+}
+
+.dark .text-gray-600 {
+  color: rgb(148 163 184) !important; /* slate-400 */
+}
+
+.dark .text-gray-500 {
+  color: rgb(148 163 184) !important; /* slate-400 */
+}
+
+.dark .text-gray-400 {
+  color: rgb(100 116 139) !important; /* slate-500 */
+}
+
+.dark .border-gray-200 {
+  border-color: rgb(51 65 85) !important; /* slate-700 */
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: rgb(15 23 42) !important;
+  color: rgb(248 250 252) !important;
+  border-color: rgb(51 65 85) !important;
+}
+
+.dark .shadow-sm {
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.3) !important;
+}
