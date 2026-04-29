@@ -9,6 +9,7 @@ import { CustomerListMVP } from './components/mvp/CustomerList.mvp'
 import { CustomerDetailMVP } from './components/mvp/CustomerDetail.mvp'
 import { TaskListMVP } from './components/mvp/TaskList.mvp'
 import { TicketListMVP } from './components/mvp/TicketList.mvp'
+import { TicketDetailMVP } from './components/mvp/TicketDetail.mvp'
 import { LeveranserListMVP } from './components/mvp/LeveranserList.mvp'
 import { LeadListMVP } from './components/mvp/LeadList.mvp'
 import { SettingsMVP } from './components/mvp/Settings.mvp'
@@ -25,7 +26,7 @@ export default function App() {
               <Route path="customers/:id" element={<CustomerDetailMVP />} />
               <Route path="tasks" element={<TaskListMVP />} />
               <Route path="tickets" element={<TicketListMVP />} />
-              <Route path="tickets/:id" element={<TicketListMVP />} />
+              <Route path="tickets/:id" element={<TicketDetailMVP />} />
               <Route path="leveranser" element={<LeveranserListMVP />} />
               <Route path="leads" element={<LeadListMVP />} />
               <Route path="settings" element={<SettingsMVP />} />
