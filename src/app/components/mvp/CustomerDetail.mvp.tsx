@@ -228,21 +228,21 @@ export function CustomerDetailMVP() {
   }, [id]);
 
   // Build customer object from Supabase data (fallback to mock if loading)
-  const customer = supaCustomer ? {
-    id: supaCustomer.id,
-    name: supaCustomer.bedriftsnavn,
-    legalName: supaCustomer.juridisk_navn || supaCustomer.bedriftsnavn,
-    orgNumber: supaCustomer.org_nummer || '—',
-    website: supaCustomer.nettside || '',
+  const customer = {
+    id: supaCustomer?.id || id,
+    name: supaCustomer?.bedriftsnavn || '—',
+    legalName: supaCustomer?.juridisk_navn || supaCustomer?.bedriftsnavn || '—',
+    orgNumber: supaCustomer?.org_nummer || '—',
+    website: supaCustomer?.nettside || '',
     status: 'Active',
-    healthScore: supaCustomer.helse_score || 75,
-    healthStatus: supaCustomer.helse_score >= 80 ? 'good' : supaCustomer.helse_score >= 60 ? 'warning' : 'danger',
+    healthScore: supaCustomer?.helse_score || 75,
+    healthStatus: (supaCustomer?.helse_score || 0) >= 80 ? 'good' : supaCustomer.helse_score >= 60 ? 'warning' : 'danger',
     owner: 'Ola Nordmann',
     team: 'Team Oslo',
     country: 'Norge',
-    city: supaCustomer.sted?.split(',')[0] || 'Oslo',
-    monthlyValue: supaCustomer.mrr || 0,
-    startDate: supaCustomer.kunde_siden ? new Date(supaCustomer.kunde_siden).toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric' }) : '—',
+    city: supaCustomer?.sted?.split(',')[0] || 'Oslo',
+    monthlyValue: supaCustomer?.mrr || 0,
+    startDate: supaCustomer?.kunde_siden ? new Date(supaCustomer.kunde_siden).toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric' }) : '—',
     lastContact: '2 dager siden',
     services: supaCustomer?.tjenester?.map((t: any) => ({
       name: t.navn, status: t.status === 'active' ? 'Active' : 'Onboarding',
