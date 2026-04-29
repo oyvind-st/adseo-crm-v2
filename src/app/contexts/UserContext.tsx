@@ -106,13 +106,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const session = readSessionFromStorage();
 
     if (session?.access_token && session?.refresh_token && session?.user) {
-      // Tell the Supabase client about the session so it uses the JWT for queries
-      supabase.auth.setSession({
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-      }).catch(console.error);
-
-      // Set user immediately so UI shows right away
+      // Set user immediately from localStorage — no API calls, no lock conflicts
       const u = session.user;
       setUser({
         id: u.id,
