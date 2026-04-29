@@ -26,6 +26,7 @@ export function TicketDetailMVP() {
   });
   const [supaTicket, setSupaTicket] = useState<any>(null);
   const [supaLoading, setSupaLoading] = useState(true);
+  const [conversation, setConversation] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -36,19 +37,26 @@ export function TicketDetailMVP() {
       .select('*, kunder(id, bedriftsnavn, sted, nettside), kontakter(id, navn, tittel, epost, telefon)')
       .eq('id', id).single()
       .then(({ data }) => { setSupaTicket(data); setSupaLoading(false); });
+
+    // Fetch conversation messages
+    supabase.from('ticket_meldinger')
+      .select('*')
+      .eq('ticket_id', id)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => {
+        if (data) setConversation(data.map(m => ({
+          id: m.id,
+          type: m.type,
+          from: m.fra,
+          message: m.melding,
+          timestamp: new Date(m.created_at).toLocaleString('no-NO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+        })));
+      });
   }, [id]);
 
-  const [internalNotes, setInternalNotes] = useState([
-    {
-      id: '1',
-      author: 'Kari Jensen',
-      message: 'Kunden har hatt lignende problem før. Se ticket #1180',
-      timestamp: '2 timer siden'
-    }
-  ]);
+  const [internalNotes, setInternalNotes] = useState<any[]>([]);
 
-  // Mock data - ville kommet fra API/database
-  // Build ticket from Supabase data, fallback to first mock ticket for UI
+  // Build ticket from Supabase data
   const ticket = supaTicket ? {
     id: supaTicket.id,
     subject: supaTicket.tittel,
@@ -63,9 +71,11 @@ export function TicketDetailMVP() {
     assignee: 'Ola Nordmann',
     opened: new Date(supaTicket.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric' }),
     openedDate: new Date(supaTicket.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-    lastResponse: '—',
+    lastResponse: conversation.length > 0
+      ? new Date(supaTicket.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })
+      : '—',
     channel: 'E-post',
-    conversation: []
+    conversation
   } : null;
 
   // Set initial values when ticket is found
@@ -192,14 +202,29 @@ export function TicketDetailMVP() {
     }
   };
 
-  const handleSendReply = () => {
-    if (!replyText.trim()) return;
-
-    // Simuler sending av svar
-    alert('Svar sendt til ' + ticket.contact);
+  const handleSendReply = async () => {
+    if (!replyText.trim() || !ticket) return;
+    const msgText = replyText;
     setReplyText('');
     setAttachments([]);
+
+    const newMsg = {
+      id: String(Date.now()),
+      type: 'agent' as const,
+      from: 'Ola Nordmann',
+      message: msgText,
+      timestamp: 'Akkurat nå'
+    };
+    setConversation(prev => [...prev, newMsg]);
     setCurrentStatus('In progress');
+
+    // Persist to database
+    await supabase.from('ticket_meldinger').insert({
+      ticket_id: ticket.id,
+      type: 'agent',
+      fra: 'Ola Nordmann',
+      melding: msgText
+    });
   };
 
   const handleAddInternalNote = () => {
@@ -467,7 +492,10 @@ export function TicketDetailMVP() {
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Samtale</h2>
 
-                {ticket.conversation.map((message, index) => (
+                {conversation.length === 0 && (
+                  <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-6">Ingen meldinger ennå</p>
+                )}
+                {conversation.map((message, index) => (
                   <div
                     key={message.id}
                     className={`flex ${message.type === 'agent' ? 'justify-end' : 'justify-start'}`}
