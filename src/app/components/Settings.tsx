@@ -188,7 +188,7 @@ export function Settings() {
     return roles.find(r => r.id === roleId)?.name || roleId;
   };
 
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
     // TODO: Backend - Add user to database
     const user = {
       id: (users.length + 1).toString(),
@@ -201,7 +201,7 @@ export function Settings() {
     setShowAddUserModal(false);
   };
 
-  const handleDeleteUser = (userId: string) => {
+  const handleDeleteUser = async (userId: string) => {
     // TODO: Backend - Delete user from database
     if (confirm('Er du sikker på at du vil slette denne brukeren?')) {
       await supabase.from('profiles').delete().eq('id', userId);
@@ -209,7 +209,7 @@ export function Settings() {
     }
   };
 
-  const handleEditUser = () => {
+  const handleEditUser = async () => {
     // TODO: Backend - Update user in database
     await supabase.from('profiles').update({
       navn: selectedUser.name,
@@ -223,7 +223,7 @@ export function Settings() {
     setSelectedUser(null);
   };
 
-  const handleAddRole = () => {
+  const handleAddRole = async () => {
     // TODO: Backend - Add role to database
     const role = {
       id: newRole.name.toLowerCase().replace(/\s+/g, '_'),
@@ -241,7 +241,7 @@ export function Settings() {
     setSelectedRole(null);
   };
 
-  const handleDeleteRole = (roleId: string) => {
+  const handleDeleteRole = async (roleId: string) => {
     // TODO: Backend - Delete role from database
     if (roleId === 'admin') {
       alert('Administrator-rollen kan ikke slettes');
