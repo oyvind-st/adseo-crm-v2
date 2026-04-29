@@ -22,8 +22,10 @@ export function Login() {
     if (authError) {
       setError(authError.includes('Invalid') ? 'Feil e-post eller passord' : authError);
       setLoading(false);
+    } else {
+      // Force page reload to ensure clean state after login
+      window.location.href = '/';
     }
-    // On success, UserContext updates and App.tsx re-renders to show the app
   };
 
   return (
