@@ -455,7 +455,7 @@ export function CustomerDetailMVP() {
           setNotes(data.map(n => ({
             id: n.id,
             content: n.beskrivelse || n.tittel,
-            author: n.utfort_av || 'Ola Nordmann',
+            author: n.utfort_av_navn || 'Ola Nordmann',
             date: new Date(n.created_at),
             type: n.type,
             attachments: []
@@ -520,7 +520,7 @@ export function CustomerDetailMVP() {
       type: quickLogData.activityType || 'notat',
       tittel: quickLogData.activityType || 'Aktivitet',
       beskrivelse: quickLogData.note,
-      utfort_av: customer.owner
+      utfort_av_navn: customer.owner || 'Ola Nordmann'
     }).then(({ data }) => {
       if (data) setNotes([{ ...newNoteData, id: data[0]?.id || newNoteData.id }, ...notes]);
       else setNotes([newNoteData, ...notes]);
@@ -567,7 +567,7 @@ export function CustomerDetailMVP() {
       type: 'notat',
       tittel: 'Internt notat',
       beskrivelse: contentToSave,
-      utfort_av: 'Ola Nordmann'
+      utfort_av_navn: 'Ola Nordmann'
     }).select().single();
 
     if (error) {
@@ -580,7 +580,7 @@ export function CustomerDetailMVP() {
       const note = {
         id: data.id,
         content: data.beskrivelse,
-        author: data.utfort_av || 'Ola Nordmann',
+        author: data.utfort_av_navn || 'Ola Nordmann',
         date: new Date(data.created_at || Date.now()),
         type: data.type,
         attachments: []
