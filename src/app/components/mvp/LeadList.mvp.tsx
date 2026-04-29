@@ -37,11 +37,14 @@ export function LeadListMVP() {
 
       <div className="grid grid-cols-3 gap-4">
         <StatCard label="Aktive leads" value={leads.filter(l => l.stage !== 'vunnet').length}
-          icon={<TrendingUp size={20} className="text-blue-600" />} iconBg="#eff6ff" />
+          icon={<TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
+          iconColor="bg-blue-50 dark:bg-blue-900/30" />
         <StatCard label="Total pipeline" value={fmt(tv)}
-          icon={<TrendingUp size={20} className="text-green-600" />} iconBg="#f0fdf4" />
+          icon={<TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />}
+          iconColor="bg-green-50 dark:bg-green-900/30" />
         <StatCard label="Vektet verdi" value={fmt(vv)}
-          icon={<TrendingUp size={20} className="text-purple-600" />} iconBg="#f5f3ff" />
+          icon={<TrendingUp className="w-5 h-5 text-purple-600 dark:text-purple-400" />}
+          iconColor="bg-purple-50 dark:bg-purple-900/30" />
       </div>
 
       <div className="flex gap-3.5 overflow-x-auto pb-4">

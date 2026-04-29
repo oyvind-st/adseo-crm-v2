@@ -43,24 +43,15 @@ export function TicketListMVP() {
       />
 
       <div className="grid grid-cols-3 gap-4">
-        <StatCard
-          label="Åpne tickets"
-          value={tickets.filter(t => t.status === 'apent').length}
-          iconBg="#eff6ff"
-          icon={<CheckCircle2 size={20} className="text-blue-600" />}
-        />
-        <StatCard
-          label="Høy prioritet"
-          value={tickets.filter(t => t.prioritet === 'høy' && t.status !== 'lukket').length}
-          iconBg="#fef2f2"
-          icon={<AlertTriangle size={20} className="text-red-600" />}
-        />
-        <StatCard
-          label="Ubesvarte"
-          value={tickets.filter(t => t.status === 'apent').length}
-          iconBg="#fff7ed"
-          icon={<Clock size={20} className="text-orange-600" />}
-        />
+        <StatCard label="Åpne tickets" value={tickets.filter(t => t.status === 'apent').length}
+          icon={<CheckCircle2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
+          iconColor="bg-blue-50 dark:bg-blue-900/30" />
+        <StatCard label="Høy prioritet" value={tickets.filter(t => t.prioritet === 'høy' && t.status !== 'lukket').length}
+          icon={<AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />}
+          iconColor="bg-red-50 dark:bg-red-900/30" />
+        <StatCard label="Ubesvarte" value={tickets.filter(t => t.status === 'apent').length}
+          icon={<Clock className="w-5 h-5 text-orange-600 dark:text-orange-400" />}
+          iconColor="bg-orange-50 dark:bg-orange-900/30" />
       </div>
 
       <Card>

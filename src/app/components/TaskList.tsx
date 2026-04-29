@@ -3,6 +3,7 @@ import { Plus, Filter, CheckCircle2, Clock, AlertCircle, User, X, Save } from 'l
 import { TaskItem } from './TaskItem';
 import { DateTimePicker } from './DateTimePicker';
 import { supabase } from '../../lib/supabase';
+import { StatCard } from './shared';
 
 function mapPriority(p: string): 'high' | 'medium' | 'low' {
   if (p === 'høy' || p === 'high') return 'high';
@@ -120,50 +121,18 @@ export function TaskList() {
       </div>
 
       <div className="grid grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-              <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">Mine oppgaver</p>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{myTasks.length}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-orange-50 dark:bg-orange-900/30 flex items-center justify-center">
-              <Clock className="w-5 h-5 text-orange-600" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">Frist i dag</p>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{todayTasks.length}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-red-50 dark:bg-red-900/30 flex items-center justify-center">
-              <AlertCircle className="w-5 h-5 text-red-600" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">Forfalt</p>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{overdueTasks.length}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-green-50 dark:bg-green-900/30 flex items-center justify-center">
-              <CheckCircle2 className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">Fullført totalt</p>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{completedTasks.length}</p>
-            </div>
-          </div>
-        </div>
+        <StatCard label="Mine oppgaver" value={myTasks.length}
+          icon={<User className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
+          iconColor="bg-blue-50 dark:bg-blue-900/30" />
+        <StatCard label="Frist i dag" value={todayTasks.length}
+          icon={<Clock className="w-5 h-5 text-orange-600 dark:text-orange-400" />}
+          iconColor="bg-orange-50 dark:bg-orange-900/30" />
+        <StatCard label="Forfalt" value={overdueTasks.length}
+          icon={<AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />}
+          iconColor="bg-red-50 dark:bg-red-900/30" />
+        <StatCard label="Fullført totalt" value={completedTasks.length}
+          icon={<CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />}
+          iconColor="bg-green-50 dark:bg-green-900/30" />
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">

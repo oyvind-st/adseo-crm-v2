@@ -47,7 +47,8 @@ export function LeveranserListMVP() {
 
       <div className="grid grid-cols-4 gap-4">
         {(['ikke_startet', 'pagar', 'venter_pa_kunde', 'ferdig'] as const).map(s => (
-          <StatCard key={s} label={STATUS_LABEL[s]} value={leveranser.filter(l => l.status === s).length} />
+          <StatCard key={s} label={STATUS_LABEL[s]} value={leveranser.filter(l => l.status === s).length}
+            iconColor={s === 'ferdig' ? 'bg-green-50 dark:bg-green-900/30' : s === 'pagar' ? 'bg-blue-50 dark:bg-blue-900/30' : 'bg-slate-100 dark:bg-slate-700'} />
         ))}
       </div>
 
