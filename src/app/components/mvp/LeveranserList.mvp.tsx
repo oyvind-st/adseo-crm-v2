@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Plus, ArrowRight } from 'lucide-react'
+import { Plus, Package } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
-import { PageHeader } from '../shared/PageHeader'
-import { StatCard } from '../shared/StatCard'
-import { StatusBadge } from '../shared/PriorityBadge'
+import { PageHeader, Button, Card, Tabs, Tab, TabList, StatCard, StatusBadge, Loading, EmptyState } from '../shared'
 
-const STATUS_LABEL: Record<string,string> = { ikke_startet:'Ikke startet', pagar:'Pågår', venter_pa_kunde:'Venter på kunde', ferdig:'Ferdig' }
-const TABS = ['Alle','Ikke startet','Pågår','Venter','Ferdig']
+const STATUS_LABEL: Record<string, string> = {
+  ikke_startet: 'Ikke startet', pagar: 'Pågår',
+  venter_pa_kunde: 'Venter på kunde', ferdig: 'Ferdig'
+}
 
 export function LeveranserListMVP() {
   const [leveranser, setLeveranser] = useState<any[]>([])
@@ -14,78 +14,94 @@ export function LeveranserListMVP() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.from('leveranser').select('*, kunder(bedriftsnavn), leveranse_oppgaver(id,fullfort)').order('frist')
-      .then(({ data }) => { setLeveranser(data||[]); setLoading(false) })
+    supabase.from('leveranser')
+      .select('*, kunder(bedriftsnavn), leveranse_oppgaver(id,fullfort)')
+      .order('frist')
+      .then(({ data }) => { setLeveranser(data || []); setLoading(false) })
   }, [])
 
   const getProgress = (l: any) => {
     const t = l.leveranse_oppgaver || []
-    return t.length ? Math.round(t.filter((x:any)=>x.fullfort).length/t.length*100) : 0
+    return t.length ? Math.round(t.filter((x: any) => x.fullfort).length / t.length * 100) : 0
   }
 
-  const filtered = leveranser.filter(l => {
-    if (activeTab==='Alle') return true
-    if (activeTab==='Ikke startet') return l.status==='ikke_startet'
-    if (activeTab==='Pågår') return l.status==='pagar'
-    if (activeTab==='Venter') return l.status==='venter_pa_kunde'
-    if (activeTab==='Ferdig') return l.status==='ferdig'
-    return true
-  })
+  const TABS = ['Alle', 'Ikke startet', 'Pågår', 'Venter', 'Ferdig']
+  const TAB_MAP: Record<string, string> = {
+    'Alle': '', 'Ikke startet': 'ikke_startet', 'Pågår': 'pagar',
+    'Venter': 'venter_pa_kunde', 'Ferdig': 'ferdig'
+  }
+
+  const filtered = leveranser.filter(l =>
+    activeTab === 'Alle' || l.status === TAB_MAP[activeTab]
+  )
+
+  if (loading) return <Loading fullPage text="Laster leveranser..." />
 
   return (
-    <div className="p-8">
-      <PageHeader title="Leveranser" subtitle={`${leveranser.filter(l=>l.status!=='ferdig').length} aktive leveranser`}
-        action={<button className="flex items-center gap-2 bg-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors shadow-sm"><Plus size={15}/> Ny leveranse</button>}/>
+    <div className="p-6 space-y-6">
+      <PageHeader
+        title="Leveranser"
+        subtitle={`${leveranser.filter(l => l.status !== 'ferdig').length} aktive leveranser`}
+        action={<Button icon={<Plus size={15} />}>Ny leveranse</Button>}
+      />
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {(['ikke_startet','pagar','venter_pa_kunde','ferdig'] as const).map(s => (
-          <StatCard key={s} label={STATUS_LABEL[s]} value={leveranser.filter(l=>l.status===s).length} loading={loading}/>
+      <div className="grid grid-cols-4 gap-4">
+        {(['ikke_startet', 'pagar', 'venter_pa_kunde', 'ferdig'] as const).map(s => (
+          <StatCard key={s} label={STATUS_LABEL[s]} value={leveranser.filter(l => l.status === s).length} />
         ))}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="flex border-b border-gray-100 px-5">
-          {TABS.map(t => (
-            <button key={t} onClick={()=>setActiveTab(t)}
-              className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${activeTab===t?'border-violet-600 text-violet-600':'border-transparent text-gray-400 hover:text-gray-600'}`}>
-              {t}
-            </button>
-          ))}
-        </div>
+      <Card>
+        <Tabs value={activeTab} onChange={setActiveTab}>
+          <TabList className="px-2">
+            {TABS.map(t => <Tab key={t} value={t}>{t}</Tab>)}
+          </TabList>
+        </Tabs>
 
-        {loading ? <div className="p-10 text-center text-gray-400 text-sm">Laster...</div> :
-          filtered.length===0 ? <div className="p-10 text-center text-gray-400 text-sm">Ingen leveranser</div> :
-          filtered.map((l,i) => {
-            const p = getProgress(l)
-            const tot = (l.leveranse_oppgaver||[]).length
-            const done = (l.leveranse_oppgaver||[]).filter((x:any)=>x.fullfort).length
-            return (
-              <div key={l.id} className={`px-5 py-4 ${i<filtered.length-1?'border-b border-gray-50':''}`}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center text-base flex-shrink-0"
-                      style={{background:'linear-gradient(135deg,#ede9fe,#ddd6fe)'}}>📦</div>
-                    <div>
-                      <div className="font-semibold text-sm text-gray-900">{l.kunder?.bedriftsnavn}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">{l.tittel}{l.type?` · ${l.type}`:''}</div>
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon={<Package size={28} />}
+            title="Ingen leveranser"
+            description={`Ingen leveranser med status "${activeTab}"`}
+          />
+        ) : filtered.map((l, i) => {
+          const p = getProgress(l)
+          const tot = (l.leveranse_oppgaver || []).length
+          const done = (l.leveranse_oppgaver || []).filter((x: any) => x.fullfort).length
+          return (
+            <div key={l.id} className={`px-5 py-4 ${i < filtered.length - 1 ? 'border-b border-slate-100 dark:border-slate-700' : ''}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center text-base flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg,#ede9fe,#ddd6fe)' }}>📦</div>
+                  <div>
+                    <div className="font-semibold text-sm text-slate-900 dark:text-white">
+                      {l.kunder?.bedriftsnavn}
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {l.tittel}{l.type ? ` · ${l.type}` : ''}
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400">
-                      {tot>0?`${done}/${tot} oppgaver`:''}{l.frist?`  ·  Frist ${new Date(l.frist).toLocaleDateString('no-NO',{day:'numeric',month:'short'})}`:''}</span>
-                    <StatusBadge status={l.status}/>
-                    <ArrowRight size={14} className="text-gray-300"/>
-                  </div>
                 </div>
-                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all" style={{width:`${p}%`,background:'linear-gradient(90deg,#7c3aed,#9333ea)'}}/>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-400">
+                    {tot > 0 ? `${done}/${tot} oppgaver` : ''}
+                    {l.frist ? `  ·  Frist ${new Date(l.frist).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })}` : ''}
+                  </span>
+                  <StatusBadge status={l.status} />
                 </div>
-                {tot>0&&<div className="text-xs text-gray-400 mt-1 text-right">{p}%</div>}
               </div>
-            )
-          })
-        }
-      </div>
+              <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all"
+                  style={{ width: `${p}%`, background: 'linear-gradient(90deg,#3b82f6,#6366f1)' }} />
+              </div>
+              {tot > 0 && (
+                <div className="text-xs text-slate-400 mt-1 text-right">{p}%</div>
+              )}
+            </div>
+          )
+        })}
+      </Card>
     </div>
   )
 }

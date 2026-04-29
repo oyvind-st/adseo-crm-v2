@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Plus, CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
-import { PageHeader } from '../shared/PageHeader'
-import { StatCard } from '../shared/StatCard'
-import { PriorityBadge } from '../shared/PriorityBadge'
+import { PageHeader, Button, Card, Tabs, Tab, TabList, Avatar, Badge, PriorityBadge, StatCard, Loading, EmptyState } from '../shared'
+import { Ticket } from 'lucide-react'
 
-const TABS = ['Åpne saker', 'Pågår', 'Venter på kunde', 'Lukket']
-const STATUS_MAP: Record<string, string> = { 'Åpne saker': 'apent', 'Pågår': 'pagar', 'Venter på kunde': 'venter_pa_kunde', 'Lukket': 'lukket' }
+const STATUS_MAP: Record<string, string> = {
+  'Åpne saker': 'apent', 'Pågår': 'pagar',
+  'Venter på kunde': 'venter_pa_kunde', 'Lukket': 'lukket'
+}
 
 export function TicketListMVP() {
   const [tickets, setTickets] = useState<any[]>([])
@@ -20,61 +21,100 @@ export function TicketListMVP() {
   }, [])
 
   const filtered = tickets.filter(t => t.status === STATUS_MAP[activeTab])
-  const counts = Object.fromEntries(Object.entries(STATUS_MAP).map(([tab, status]) => [tab, tickets.filter(t => t.status === status).length]))
+  const counts = Object.fromEntries(
+    Object.entries(STATUS_MAP).map(([tab, status]) => [tab, tickets.filter(t => t.status === status).length])
+  )
 
   const timeAgo = (d: string) => {
     const h = Math.floor((Date.now() - new Date(d).getTime()) / 3600000)
     if (h < 1) return 'Akkurat nå'
     if (h < 24) return `${h}t siden`
-    return `${Math.floor(h/24)}d siden`
+    return `${Math.floor(h / 24)}d siden`
   }
 
+  if (loading) return <Loading fullPage text="Laster tickets..." />
+
   return (
-    <div className="p-8">
-      <PageHeader title="Tickets" subtitle={`${tickets.filter(t=>t.status==='apent').length} åpne saker`}
-        action={<button className="flex items-center gap-2 bg-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors shadow-sm"><Plus size={15}/> Ny ticket</button>}/>
+    <div className="p-6 space-y-6">
+      <PageHeader
+        title="Tickets"
+        subtitle={`${tickets.filter(t => t.status === 'apent').length} åpne saker`}
+        action={<Button icon={<Plus size={15} />}>Ny ticket</Button>}
+      />
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <StatCard label="Åpne tickets" value={tickets.filter(t=>t.status==='apent').length} icon={<CheckCircle2 size={18} color="#7c3aed"/>} iconBg="#f5f3ff" loading={loading}/>
-        <StatCard label="Høy prioritet" value={tickets.filter(t=>t.prioritet==='høy'&&t.status!=='lukket').length} icon={<AlertTriangle size={18} color="#dc2626"/>} iconBg="#fef2f2" loading={loading}/>
-        <StatCard label="Ubesvarte" value={tickets.filter(t=>t.status==='apent').length} icon={<Clock size={18} color="#ea580c"/>} iconBg="#fff7ed" loading={loading}/>
+      <div className="grid grid-cols-3 gap-4">
+        <StatCard
+          label="Åpne tickets"
+          value={tickets.filter(t => t.status === 'apent').length}
+          iconBg="#eff6ff"
+          icon={<CheckCircle2 size={20} className="text-blue-600" />}
+        />
+        <StatCard
+          label="Høy prioritet"
+          value={tickets.filter(t => t.prioritet === 'høy' && t.status !== 'lukket').length}
+          iconBg="#fef2f2"
+          icon={<AlertTriangle size={20} className="text-red-600" />}
+        />
+        <StatCard
+          label="Ubesvarte"
+          value={tickets.filter(t => t.status === 'apent').length}
+          iconBg="#fff7ed"
+          icon={<Clock size={20} className="text-orange-600" />}
+        />
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="flex border-b border-gray-100 px-5">
-          {TABS.map(t => (
-            <button key={t} onClick={() => setActiveTab(t)}
-              className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab===t?'border-violet-600 text-violet-600':'border-transparent text-gray-400 hover:text-gray-600'}`}>
-              {t}{counts[t]>0&&<span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${activeTab===t?'bg-violet-100 text-violet-600':'bg-gray-100 text-gray-400'}`}>{counts[t]}</span>}
-            </button>
-          ))}
-        </div>
+      <Card>
+        <Tabs value={activeTab} onChange={setActiveTab}>
+          <TabList className="px-2">
+            {Object.keys(STATUS_MAP).map(tab => (
+              <Tab key={tab} value={tab} count={counts[tab]}>{tab}</Tab>
+            ))}
+          </TabList>
+        </Tabs>
 
-        {loading ? <div className="p-10 text-center text-gray-400 text-sm">Laster...</div> :
-          filtered.length === 0 ? <div className="p-10 text-center text-gray-400 text-sm">Ingen tickets her</div> :
-          filtered.map((t, i) => (
-            <div key={t.id} className={`flex items-start gap-4 px-5 py-4 hover:bg-gray-50 transition-colors cursor-pointer ${i<filtered.length-1?'border-b border-gray-50':''}`}>
-              <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-violet-600 flex-shrink-0 mt-0.5"
-                style={{background:'linear-gradient(135deg,#ede9fe,#ddd6fe)'}}>
-                {(t.kontakter?.navn||t.kunder?.bedriftsnavn||'?').slice(0,2).toUpperCase()}
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon={<Ticket size={28} />}
+            title="Ingen tickets her"
+            description={`Ingen tickets med status "${activeTab}"`}
+          />
+        ) : filtered.map((t, i) => (
+          <div key={t.id}
+            className={`flex items-start gap-4 px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer ${i < filtered.length - 1 ? 'border-b border-slate-100 dark:border-slate-700' : ''}`}>
+            <Avatar
+              name={t.kontakter?.navn || t.kunder?.bedriftsnavn || '?'}
+              size="sm"
+              className="mt-0.5"
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-medium text-slate-900 dark:text-white">
+                  {t.kontakter?.navn || t.kunder?.bedriftsnavn || 'Ukjent'}
+                </span>
+                {t.prioritet === 'høy' && (
+                  <Badge variant="red" size="sm">Høy prioritet</Badge>
+                )}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-medium text-gray-900">{t.kontakter?.navn || t.kunder?.bedriftsnavn || 'Ukjent'}</span>
-                  {t.prioritet==='høy'&&<span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full">Høy prioritet</span>}
-                </div>
-                <div className="text-sm text-gray-700 mb-1">{t.tittel}</div>
-                {t.beskrivelse&&<div className="text-xs text-gray-400 truncate max-w-lg mb-1.5">{t.beskrivelse}</div>}
-                <div className="flex gap-2 text-xs text-gray-400 items-center">
-                  {t.kunder?.bedriftsnavn&&<span className="font-medium text-gray-500">{t.kunder.bedriftsnavn}</span>}
-                  {t.kategori&&<span className="bg-gray-100 px-2 py-0.5 rounded-full">{t.kategori}</span>}
-                </div>
+              <div className="text-sm text-slate-700 dark:text-slate-300 mb-1">{t.tittel}</div>
+              {t.beskrivelse && (
+                <div className="text-xs text-slate-400 truncate max-w-lg mb-1.5">{t.beskrivelse}</div>
+              )}
+              <div className="flex gap-2 text-xs text-slate-400 items-center">
+                {t.kunder?.bedriftsnavn && (
+                  <span className="font-medium text-slate-500 dark:text-slate-400">{t.kunder.bedriftsnavn}</span>
+                )}
+                {t.kategori && (
+                  <Badge variant="slate" size="sm">{t.kategori}</Badge>
+                )}
               </div>
-              <div className="text-xs text-gray-400 flex-shrink-0">{timeAgo(t.created_at)}</div>
             </div>
-          ))
-        }
-      </div>
+            <div className="flex flex-col items-end gap-1.5">
+              <span className="text-xs text-slate-400">{timeAgo(t.created_at)}</span>
+              <PriorityBadge priority={t.prioritet} />
+            </div>
+          </div>
+        ))}
+      </Card>
     </div>
   )
 }
