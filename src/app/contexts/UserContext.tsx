@@ -31,42 +31,95 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadProfile = async (userId: string) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (data) {
+  const loadProfile = async (authUser: { id: string; email?: string }) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+
+      if (data) {
+        setUser({
+          id: data.id,
+          navn: data.navn || authUser.email?.split('@')[0] || 'Bruker',
+          epost: data.epost || authUser.email || '',
+          telefon: data.telefon,
+          rolle: data.rolle || 'selger',
+          status: data.status || 'active',
+          avatar_initials: data.avatar_initials,
+        });
+      } else {
+        // Profile doesn't exist yet — create it from auth user
+        const navn = authUser.email?.split('@')[0] || 'Bruker';
+        await supabase.from('profiles').upsert({
+          id: authUser.id,
+          epost: authUser.email || '',
+          navn,
+          rolle: 'selger',
+          status: 'active',
+        });
+        setUser({
+          id: authUser.id,
+          navn,
+          epost: authUser.email || '',
+          rolle: 'selger',
+          status: 'active',
+        });
+      }
+    } catch (err) {
+      console.error('loadProfile error:', err);
+      // Still allow access even if profile load fails
       setUser({
-        id: data.id,
-        navn: data.navn || data.epost?.split('@')[0] || 'Ukjent',
-        epost: data.epost || '',
-        telefon: data.telefon,
-        rolle: data.rolle || 'selger',
-        status: data.status || 'active',
-        avatar_initials: data.avatar_initials,
+        id: authUser.id,
+        navn: authUser.email?.split('@')[0] || 'Bruker',
+        epost: authUser.email || '',
+        rolle: 'selger',
+        status: 'active',
       });
     }
   };
 
   useEffect(() => {
+    let mounted = true;
+
+    // Safety timeout — never show spinner more than 5 seconds
+    const timeout = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 5000);
+
     // Check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        loadProfile(session.user.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
+    supabase.auth.getSession()
+      .then(async ({ data: { session } }) => {
+        if (!mounted) return;
+        if (session?.user) {
+          await loadProfile(session.user);
+        }
+      })
+      .catch(console.error)
+      .finally(() => {
+        if (mounted) {
+          clearTimeout(timeout);
+          setLoading(false);
+        }
+      });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
       if (session?.user) {
-        await loadProfile(session.user.id);
+        await loadProfile(session.user);
       } else {
         setUser(null);
       }
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -82,8 +135,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
     if (!user) return;
-    const { data } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single();
-    if (data) setUser({ ...user, ...data });
+    try {
+      const { data } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single();
+      if (data) setUser({ ...user, ...data });
+    } catch (err) {
+      console.error('updateProfile error:', err);
+    }
   };
 
   return (
