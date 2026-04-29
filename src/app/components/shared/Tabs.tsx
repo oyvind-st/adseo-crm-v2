@@ -1,5 +1,9 @@
 import { ReactNode, createContext, useContext } from 'react'
 
+// Tabs extracted exactly from Figma TaskList/TicketList design
+// Active:   text-blue-600 dark:text-blue-400 border-b-2 border-blue-600
+// Inactive: text-slate-600 dark:text-slate-400 hover:text-slate-900
+
 interface TabsContextType {
   active: string
   onChange: (value: string) => void
@@ -17,7 +21,6 @@ interface TabsProps {
 interface TabListProps {
   children: ReactNode
   className?: string
-  border?: boolean
 }
 
 interface TabProps {
@@ -35,15 +38,9 @@ export function Tabs({ value, onChange, children, className = '' }: TabsProps) {
   )
 }
 
-export function TabList({ children, className = '', border = true }: TabListProps) {
+export function TabList({ children, className = '' }: TabListProps) {
   return (
-    <div
-      className={`
-        flex overflow-x-auto
-        ${border ? 'border-b border-slate-200 dark:border-slate-700' : ''}
-        ${className}
-      `}
-    >
+    <div className={`flex border-b border-slate-200 dark:border-slate-700 ${className}`}>
       {children}
     </div>
   )
@@ -56,25 +53,19 @@ export function Tab({ value, children, count, className = '' }: TabProps) {
   return (
     <button
       onClick={() => onChange(value)}
-      className={`
-        flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 -mb-px
-        transition-colors whitespace-nowrap focus:outline-none
-        ${isActive
-          ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-          : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
-        }
-        ${className}
-      `}
+      className={`flex items-center gap-1.5 px-4 py-3 font-medium transition-colors whitespace-nowrap ${
+        isActive
+          ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 -mb-px'
+          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+      } ${className}`}
     >
       {children}
       {count !== undefined && count > 0 && (
-        <span className={`
-          text-xs px-1.5 py-0.5 rounded-full font-medium
-          ${isActive
-            ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400'
-            : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
-          }
-        `}>
+        <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+          isActive
+            ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400'
+            : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+        }`}>
           {count}
         </span>
       )}

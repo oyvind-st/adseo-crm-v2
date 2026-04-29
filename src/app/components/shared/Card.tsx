@@ -1,5 +1,7 @@
 import { ReactNode, HTMLAttributes } from 'react'
 
+// Card extracted exactly from Figma design — no extra shadows
+
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode
   padding?: boolean
@@ -20,12 +22,7 @@ interface CardBodyProps extends HTMLAttributes<HTMLDivElement> {
 export function Card({ children, padding = false, hover = false, className = '', ...props }: CardProps) {
   return (
     <div
-      className={`
-        bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm
-        ${hover ? 'hover:shadow-md transition-shadow cursor-pointer' : ''}
-        ${padding ? 'p-6' : ''}
-        ${className}
-      `}
+      className={`bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700${hover ? ' hover:shadow-md transition-shadow cursor-pointer' : ''}${padding ? ' p-6' : ''}${className ? ' ' + className : ''}`}
       {...props}
     >
       {children}
