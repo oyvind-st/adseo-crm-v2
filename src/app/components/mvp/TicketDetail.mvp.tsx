@@ -87,14 +87,19 @@ export function TicketDetailMVP() {
     conversation
   } : null;
 
-  // Set initial values when ticket is found
+  // Set initial values once when ticket data first loads (stable dep = supaTicket.id)
   useEffect(() => {
-    if (ticket) {
-      setCurrentStatus(ticket.status);
-      setCurrentAssignee(ticket.assignee);
-      setCurrentCustomerId(ticket.customerId);
+    if (supaTicket) {
+      setCurrentStatus(
+        supaTicket.status === 'apent' ? 'Open'
+        : supaTicket.status === 'pagar' ? 'In progress'
+        : supaTicket.status === 'venter_pa_kunde' ? 'Waiting for customer'
+        : 'Resolved'
+      );
+      setCurrentAssignee('Ola Nordmann');
+      setCurrentCustomerId(supaTicket.kunder?.id || '');
     }
-  }, [ticket]);
+  }, [supaTicket?.id]);
 
   if (supaLoading) {
     return (
@@ -701,30 +706,35 @@ export function TicketDetailMVP() {
               <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">
                 Kundeinformasjon
               </h3>
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Bedrift</p>
-                    <button
-                      onClick={() => navigate(`/customers/${ticket.customerId}`)}
-                      className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
-                    >
-                      {ticket.customer}
-                    </button>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Kontakt</p>
-                    <p className="text-slate-900 dark:text-white">{ticket.contact}</p>
-                    <p className="text-slate-600 dark:text-slate-400 text-xs mt-0.5">{ticket.contactEmail}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Månedlig verdi</p>
-                    <p className="text-slate-900 dark:text-white font-medium">45 000 kr</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Kunde siden</p>
-                    <p className="text-slate-900 dark:text-white">01.01.2024</p>
-                  </div>
-              </div>
+                {(() => {
+                  // Use the actively selected customer, falling back to the original ticket data
+                  const displayName = selectedCustomer?.name || supaTicket?.kunder?.bedriftsnavn;
+                  const displayId = currentCustomerId || supaTicket?.kunder?.id;
+                  return (
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Bedrift</p>
+                        {displayId ? (
+                          <button
+                            onClick={() => navigate(`/customers/${displayId}`)}
+                            className="text-blue-600 dark:text-blue-400 hover:underline font-medium text-left"
+                          >
+                            {displayName || '—'}
+                          </button>
+                        ) : (
+                          <p className="text-slate-400 italic text-xs">Ingen kunde koblet</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Kontakt</p>
+                        <p className="text-slate-900 dark:text-white">{ticket.contact || '—'}</p>
+                        {ticket.contactEmail && (
+                          <p className="text-slate-600 dark:text-slate-400 text-xs mt-0.5">{ticket.contactEmail}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
             </div>
 
             {/* Activity Log */}
