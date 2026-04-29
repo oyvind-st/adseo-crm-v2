@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
+  Palette,
   Building2,
   UserPlus,
   CheckSquare,
@@ -254,6 +255,18 @@ export function Layout() {
           >
             <Settings className="w-5 h-5" />
             <span className="font-medium">Innstillinger</span>
+          </Link>
+
+          <Link
+            to="/design-system"
+            className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+              isActive('/design-system')
+                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+            }`}
+          >
+            <Palette className="w-5 h-5" />
+            <span className="font-medium">Designsystem</span>
           </Link>
         </nav>
 

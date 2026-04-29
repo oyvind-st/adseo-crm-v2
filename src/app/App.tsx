@@ -16,6 +16,7 @@ import { TicketDetailMVP } from './components/mvp/TicketDetail.mvp'
 import { LeveranserListMVP } from './components/mvp/LeveranserList.mvp'
 import { LeadListMVP } from './components/mvp/LeadList.mvp'
 import { SettingsMVP } from './components/mvp/Settings.mvp'
+import { DesignSystemMVP } from './components/mvp/DesignSystem.mvp'
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
               <Route path="leveranser" element={<LeveranserListMVP />} />
               <Route path="leads" element={<LeadListMVP />} />
               <Route path="settings" element={<SettingsMVP />} />
+              <Route path="design-system" element={<DesignSystemMVP />} />
               <Route path="*" element={<Dashboard />} />
             </Route>
           </Routes>
