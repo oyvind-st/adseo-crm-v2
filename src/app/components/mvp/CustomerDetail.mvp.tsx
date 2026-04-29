@@ -236,7 +236,7 @@ export function CustomerDetailMVP() {
     website: supaCustomer?.nettside || '',
     status: 'Active',
     healthScore: supaCustomer?.helse_score || 75,
-    healthStatus: (supaCustomer?.helse_score || 0) >= 80 ? 'good' : supaCustomer.helse_score >= 60 ? 'warning' : 'danger',
+    healthStatus: (supaCustomer?.helse_score || 0) >= 80 ? 'good' : (supaCustomer?.helse_score || 0) >= 60 ? 'warning' : 'danger',
     owner: 'Ola Nordmann',
     team: 'Team Oslo',
     country: 'Norge',
