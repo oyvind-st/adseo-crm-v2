@@ -52,6 +52,39 @@ export function LeveranserListMVP() {
             </button>
           ))}
         </div>
+
+        {loading ? <div className="p-10 text-center text-gray-400 text-sm">Laster...</div> :
+          filtered.length===0 ? <div className="p-10 text-center text-gray-400 text-sm">Ingen leveranser</div> :
+          filtered.map((l,i) => {
+            const p = getProgress(l)
+            const tot = (l.leveranse_oppgaver||[]).length
+            const done = (l.leveranse_oppgaver||[]).filter((x:any)=>x.fullfort).length
+            return (
+              <div key={l.id} className={`px-5 py-4 ${i<filtered.length-1?'border-b border-gray-50':''}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center text-base flex-shrink-0"
+                      style={{background:'linear-gradient(135deg,#ede9fe,#ddd6fe)'}}>📦</div>
+                    <div>
+                      <div className="font-semibold text-sm text-gray-900">{l.kunder?.bedriftsnavn}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{l.tittel}{l.type?` · ${l.type}`:''}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">
+                      {tot>0?`${done}/${tot} oppgaver`:''}{l.frist?`  ·  Frist ${new Date(l.frist).toLocaleDateString('no-NO',{day:'numeric',month:'short'})}`:''}</span>
+                    <StatusBadge status={l.status}/>
+                    <ArrowRight size={14} className="text-gray-300"/>
+                  </div>
+                </div>
+                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{width:`${p}%`,background:'linear-gradient(90deg,#7c3aed,#9333ea)'}}/>
+                </div>
+                {tot>0&&<div className="text-xs text-gray-400 mt-1 text-right">{p}%</div>}
+              </div>
+            )
+          })
+        }
       </div>
     </div>
   )

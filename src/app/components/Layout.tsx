@@ -117,6 +117,46 @@ export function Layout() {
             <span className="font-medium">Kunder</span>
           </Link>
 
+          {/* Salg Section */}
+          {!isMVPMode && (
+            <>
+              <div className="pt-4 pb-2">
+                <p className="px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Salg
+                </p>
+              </div>
+
+              <Link
+                to="/prospects"
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+                  isActive('/prospects')
+                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Database className="w-5 h-5" />
+                <span className="font-medium">Prospekter</span>
+              </Link>
+
+              <Link
+                to="/call-list"
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+                  isActive('/call-list')
+                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Phone className="w-5 h-5" />
+                <div className="flex items-center justify-between flex-1">
+                  <span className="font-medium">Ringeliste</span>
+                  <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full">
+                    23
+                  </span>
+                </div>
+              </Link>
+            </>
+          )}
+
           <Link
             to="/leads"
             className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
@@ -128,8 +168,81 @@ export function Layout() {
             <Target className="w-5 h-5" />
             <div className="flex items-center justify-between flex-1">
               <span className="font-medium">Pipeline</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                2.4M kr
+              </span>
             </div>
           </Link>
+
+          {/* Produksjon Section */}
+          {!isMVPMode && (
+            <>
+              <div className="pt-4 pb-2">
+                <p className="px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Produksjon
+                </p>
+              </div>
+
+              <Link
+                to="/onboarding"
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+                  isActive('/onboarding')
+                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                <PlayCircle className="w-5 h-5" />
+                <span className="font-medium">Onboarding</span>
+              </Link>
+
+              <Link
+                to="/health"
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+                  isActive('/health')
+                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Activity className="w-5 h-5" />
+                <span className="font-medium">Kundehelse</span>
+              </Link>
+            </>
+          )}
+
+          {/* Administrasjon Section */}
+          {!isMVPMode && (
+            <>
+              <div className="pt-4 pb-2">
+                <p className="px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Administrasjon
+                </p>
+              </div>
+
+              <Link
+                to="/integrations"
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+                  isActive('/integrations')
+                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Plug className="w-5 h-5" />
+                <span className="font-medium">Integrasjoner</span>
+              </Link>
+
+              <Link
+                to="/reports"
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+                  isActive('/reports')
+                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                <BarChart3 className="w-5 h-5" />
+                <span className="font-medium">Rapporter</span>
+              </Link>
+            </>
+          )}
 
           <Link
             to="/settings"
@@ -177,10 +290,11 @@ export function Layout() {
                 placeholder="Søk kunder, kontakter, tickets..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bt-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
               />
             </form>
           </div>
+
           <div className="flex items-center gap-4">
             <button
               onClick={toggleMVPMode}
@@ -197,6 +311,7 @@ export function Layout() {
             <button
               onClick={toggleDarkMode}
               className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              aria-label="Toggle dark mode"
             >
               {isDarkMode ? (
                 <Sun className="w-5 h-5 text-slate-600 dark:text-slate-400" />

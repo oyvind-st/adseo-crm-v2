@@ -4,7 +4,7 @@ import { supabase } from '../../../lib/supabase'
 import { PageHeader } from '../shared/PageHeader'
 import { StatCard } from '../shared/StatCard'
 
-const STABE = [
+const STAGES = [
   { key: 'ny_lead',       label: 'Ny lead',       color: '#6b7280' },
   { key: 'kvalifisering', label: 'Kvalifisering',  color: '#7c3aed' },
   { key: 'mote_booket',   label: 'Møte booket',    color: '#2563eb' },
@@ -24,7 +24,7 @@ export function LeadListMVP() {
 
   const tv = leads.reduce((s,l)=>s+(l.verdi||0),0)
   const vv = leads.reduce((s,l)=>s+(l.verdi*l.sannsynlighet/100||0),0)
-  const fmt = (n:number) => n>=1000000?`${n/1000000}.toFixed(1)}M kr`:`${(n/1000).toFixed(0)}k kr`
+  const fmt = (n:number) => n>=1000000?`${(n/1000000).toFixed(1)}M kr`:`${(n/1000).toFixed(0)}k kr`
 
   return (
     <div className="p-8">
@@ -52,7 +52,7 @@ export function LeadListMVP() {
                   <div className="w-2.5 h-2.5 rounded-full mt-1" style={{background:stage.color}}/>
                 </div>
                 {sl.map(lead => (
-                  <div key={lead.id} className="bg-white rounded-xl p-3.5 border border-gray-100 mb-2.5 cursor-pointer hover:shadow-md hover:-vranslate-y-px transition-all">
+                  <div key={lead.id} className="bg-white rounded-xl p-3.5 border border-gray-100 mb-2.5 cursor-pointer hover:shadow-md hover:-translate-y-px transition-all">
                     <div className="font-semibold text-sm text-gray-900 mb-1">{lead.bedriftsnavn}</div>
                     {lead.kontaktperson&&<div className="text-xs text-gray-500 mb-2">{lead.kontaktperson}{lead.stilling?` · ${lead.stilling}`:''}</div>}
                     <div className="flex items-center justify-between mb-2">
