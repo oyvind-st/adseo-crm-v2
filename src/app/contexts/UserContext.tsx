@@ -83,28 +83,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    // Safety timeout — never show spinner more than 5 seconds
-    const timeout = setTimeout(() => {
-      if (mounted) setLoading(false);
-    }, 5000);
-
-    // Check current session
-    supabase.auth.getSession()
-      .then(async ({ data: { session } }) => {
-        if (!mounted) return;
-        if (session?.user) {
-          await loadProfile(session.user);
-        }
-      })
-      .catch(console.error)
-      .finally(() => {
-        if (mounted) {
-          clearTimeout(timeout);
-          setLoading(false);
-        }
-      });
-
-    // Listen for auth changes
+    // Use only onAuthStateChange — avoids lock conflicts with getSession()
+    // INITIAL_SESSION fires immediately with current session (or null)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       if (session?.user) {
@@ -114,6 +94,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }
       setLoading(false);
     });
+
+    // Safety fallback — if onAuthStateChange never fires within 3 seconds
+    const timeout = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 3000);
 
     return () => {
       mounted = false;
