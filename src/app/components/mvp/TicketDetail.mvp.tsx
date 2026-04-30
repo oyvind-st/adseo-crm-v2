@@ -135,16 +135,16 @@ export function TicketDetailMVP() {
   }, [id]);
 
   // Auto-populate CC from thread whenever conversation loads/changes.
-  // Exclude addresses that appear as the primary sender (fra) in any customer
-  // message — those go into "Til:", not CC.
+  // Only exclude the specific email that goes into "Til:" (last customer sender).
+  // Everyone else who appeared on CC — including other senders — stays in CC.
   useEffect(() => {
-    const senderEmails = new Set(
-      conversation.filter(m => m.type === 'customer').map(m => m.from?.toLowerCase())
-    );
+    const lastCustomer = [...conversation].reverse().find(m => m.type === 'customer');
+    const replyToEmail = (lastCustomer?.from ?? '').toLowerCase();
+
     const allCC = conversation
       .filter(m => m.type === 'customer' && m.cc)
       .flatMap((m: any) => m.cc.split(',').map((a: string) => a.trim().toLowerCase()))
-      .filter(addr => addr && !senderEmails.has(addr));
+      .filter(addr => addr && addr !== replyToEmail);
     const unique = [...new Set(allCC)] as string[];
     if (unique.length > 0) {
       setReplyCC(prev => prev || unique.join(', '));
