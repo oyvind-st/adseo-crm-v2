@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -33,7 +33,12 @@ export function Layout() {
   const [searchQuery, setSearchQuery] = useState('');
   const { isDarkMode, toggleDarkMode } = useDarkMode();
   const { isMVPMode, toggleMVPMode } = useMVPMode();
-  const { user, signOut } = useCurrentUser();
+  const { user, signOut, stampActivity } = useCurrentUser();
+
+  // Stamp activity on every page navigation
+  useEffect(() => {
+    stampActivity();
+  }, [location.pathname]);
 
   const isActive = (path: string) => {
     return location.pathname === path || location.pathname.startsWith(path + '/');
