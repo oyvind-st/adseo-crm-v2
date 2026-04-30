@@ -15,7 +15,8 @@ import {
   AlertCircle,
   Settings as SettingsIcon,
   Bell,
-  Lock
+  Lock,
+  Send
 } from 'lucide-react';
 
 export function Settings() {
@@ -46,6 +47,8 @@ export function Settings() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('selger');
   const [inviting, setInviting] = useState(false);
+  const [sendingLinkFor, setSendingLinkFor] = useState<string | null>(null);
+  const [sentLinkFor, setSentLinkFor] = useState<string | null>(null);
 
   // Load users from Supabase profiles
   useEffect(() => {
@@ -98,6 +101,24 @@ export function Settings() {
       lastLogin: u.sist_innlogget ? new Date(u.sist_innlogget).toLocaleDateString('no-NO') : 'Aldri',
       created: u.created_at ? new Date(u.created_at).toLocaleDateString('no-NO') : '—'
     })));
+  };
+
+  const handleResendInvite = async (userEmail: string, userId: string) => {
+    setSendingLinkFor(userId);
+    setSentLinkFor(null);
+    const res = await fetch('/api/invite-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: userEmail, rolle: users.find(u => u.id === userId)?.role })
+    });
+    const result = await res.json();
+    setSendingLinkFor(null);
+    if (res.ok && !result.error) {
+      setSentLinkFor(userId);
+      setTimeout(() => setSentLinkFor(null), 3000);
+    } else {
+      alert('Feil: ' + (result.error || 'Ukjent feil'));
+    }
   };
 
   // TODO: Backend - Fetch roles from database
@@ -427,7 +448,28 @@ export function Settings() {
                       <p className="text-sm text-slate-600 dark:text-slate-400">{user.lastLogin}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        {/* Send login link */}
+                        <button
+                          onClick={() => handleResendInvite(user.email, user.id)}
+                          disabled={sendingLinkFor === user.id}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            sentLinkFor === user.id
+                              ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
+                              : user.lastLogin === 'Aldri'
+                              ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100'
+                              : 'hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400'
+                          }`}
+                          title="Send innloggingslenke"
+                        >
+                          {sentLinkFor === user.id ? (
+                            <><Check className="w-3.5 h-3.5" />Sendt!</>
+                          ) : sendingLinkFor === user.id ? (
+                            <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />Sender...</>
+                          ) : (
+                            <><Send className="w-3.5 h-3.5" />{user.lastLogin === 'Aldri' ? 'Send invitasjon' : 'Send lenke'}</>
+                          )}
+                        </button>
                         <button
                           onClick={() => {
                             setSelectedUser({ ...user });
@@ -438,7 +480,7 @@ export function Settings() {
                         >
                           <Edit className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                         </button>
-                        {user.role !== 'admin' && (
+                        {user.id !== currentUser?.id && (
                           <button
                             onClick={() => handleDeleteUser(user.id)}
                             className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
