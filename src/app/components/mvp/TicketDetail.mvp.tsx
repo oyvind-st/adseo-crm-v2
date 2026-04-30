@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, Building2, User, Calendar, Mail, Send, X, Paperclip, CheckSquare, Plus, FileText, Clock, MessageSquare, History, Zap, Tag, Search, PhoneIncoming, PhoneOff, Video, Activity, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Building2, User, Calendar, Mail, Send, X, Paperclip, CheckSquare, Plus, FileText, Clock, MessageSquare, History, Zap, Tag, Search, PhoneIncoming, PhoneOff, Video, Activity, CheckCircle, UserPlus } from 'lucide-react';
 import { DateTimePicker } from '../DateTimePicker';
 import { supabase } from '../../../lib/supabase';
 
@@ -684,9 +684,11 @@ export function TicketDetailMVP() {
                                 {currentCustomerId && (
                                   <button
                                     onClick={() => handleOpenAddContact(message.from)}
-                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                                    title="Legg til som kontaktperson"
+                                    className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-xs text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 border border-transparent hover:border-blue-200 dark:hover:border-blue-800 transition-colors"
                                   >
-                                    + Legg til som kontakt
+                                    <UserPlus className="w-3 h-3" />
+                                    <span>Legg til</span>
                                   </button>
                                 )}
                               </div>
@@ -712,17 +714,18 @@ export function TicketDetailMVP() {
                                     {known.navn} <span className="font-normal text-slate-400">&lt;{email}&gt;</span>
                                   </span>
                                 ) : (
-                                  <>
+                                  <span className="flex items-center gap-1">
                                     <span className="text-slate-500 dark:text-slate-400">{email}</span>
                                     {currentCustomerId && (
                                       <button
                                         onClick={() => handleOpenAddContact(email)}
-                                        className="text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
+                                        title="Legg til som kontaktperson"
+                                        className="p-0.5 rounded text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
                                       >
-                                        + legg til
+                                        <UserPlus className="w-3 h-3" />
                                       </button>
                                     )}
-                                  </>
+                                  </span>
                                 )}
                               </span>
                             );
