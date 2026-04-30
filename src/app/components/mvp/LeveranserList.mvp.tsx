@@ -1,106 +1,15 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Plus, Package, CheckCircle2, Clock, AlertCircle, Loader2, Calendar } from 'lucide-react'
+import { Plus, Package, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
-import { StatCard } from '../shared'
-
-const STATUS_LABEL: Record<string, string> = {
-  ikke_startet: 'Ikke startet',
-  pagar: 'Pågår',
-  venter_pa_kunde: 'Venter på kunde',
-  ferdig: 'Ferdig',
-}
-
-const STATUS_STYLE: Record<string, string> = {
-  ikke_startet: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
-  pagar:        'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
-  venter_pa_kunde: 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
-  ferdig:       'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400',
-}
+import { StatCard, LeveranseRow } from '../shared'
 
 const TABS = [
-  { key: 'alle',           label: 'Alle' },
-  { key: 'ikke_startet',   label: 'Ikke startet' },
-  { key: 'pagar',          label: 'Pågår' },
-  { key: 'venter_pa_kunde',label: 'Venter på kunde' },
-  { key: 'ferdig',         label: 'Ferdig' },
+  { key: 'alle',            label: 'Alle' },
+  { key: 'ikke_startet',    label: 'Ikke startet' },
+  { key: 'pagar',           label: 'Pågår' },
+  { key: 'venter_pa_kunde', label: 'Venter på kunde' },
+  { key: 'ferdig',          label: 'Ferdig' },
 ]
-
-function getProgress(l: any) {
-  const tasks = l.leveranse_oppgaver || []
-  if (!tasks.length) return null
-  const done = tasks.filter((t: any) => t.fullfort).length
-  return { pct: Math.round((done / tasks.length) * 100), done, total: tasks.length }
-}
-
-function LeveranseRow({ l, last }: { l: any; last: boolean }) {
-  const navigate = useNavigate()
-  const progress = getProgress(l)
-  const initials = (l.kunder?.bedriftsnavn || '?').slice(0, 2).toUpperCase()
-
-  return (
-    <div
-      onClick={() => navigate(`/leveranser/${l.id}`)}
-      className={`flex items-start gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer${last ? '' : ' border-b border-slate-100 dark:border-slate-700'}`}
-    >
-      {/* Avatar */}
-      <div className="w-9 h-9 rounded-full bg-violet-50 dark:bg-violet-900/30 flex items-center justify-center text-xs font-bold text-violet-600 dark:text-violet-400 flex-shrink-0 mt-0.5">
-        {initials}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span className="text-sm font-medium text-slate-900 dark:text-white">
-            {l.kunder?.bedriftsnavn || '—'}
-          </span>
-        </div>
-        <p className="text-sm text-slate-700 dark:text-slate-300 mb-1">{l.tittel}</p>
-        <div className="flex items-center gap-2 text-xs text-slate-400 flex-wrap">
-          {l.type && (
-            <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full text-slate-500 dark:text-slate-400">
-              {l.type}
-            </span>
-          )}
-          {l.frist && (
-            <span className="flex items-center gap-1">
-              <Calendar className="w-3 h-3" />
-              Frist {new Date(l.frist).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })}
-            </span>
-          )}
-          {progress && (
-            <span>{progress.done}/{progress.total} oppgaver</span>
-          )}
-        </div>
-
-        {/* Progress bar */}
-        {progress && (
-          <div className="mt-2.5 flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all"
-                style={{
-                  width: `${progress.pct}%`,
-                  background: progress.pct === 100
-                    ? '#22c55e'
-                    : 'linear-gradient(90deg,#3b82f6,#6366f1)'
-                }}
-              />
-            </div>
-            <span className="text-xs text-slate-400 w-8 text-right">{progress.pct}%</span>
-          </div>
-        )}
-      </div>
-
-      {/* Right side */}
-      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_STYLE[l.status] || STATUS_STYLE.ikke_startet}`}>
-          {STATUS_LABEL[l.status] || l.status}
-        </span>
-      </div>
-    </div>
-  )
-}
 
 export function LeveranserListMVP() {
   const [leveranser, setLeveranser] = useState<any[]>([])
@@ -206,7 +115,7 @@ export function LeveranserListMVP() {
             </p>
           </div>
         ) : filtered.map((l, i) => (
-          <LeveranseRow key={l.id} l={l} last={i === filtered.length - 1} />
+          <LeveranseRow key={l.id} {...l} last={i === filtered.length - 1} />
         ))}
       </div>
     </div>
