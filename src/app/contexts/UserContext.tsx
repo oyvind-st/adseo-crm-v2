@@ -89,14 +89,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {});
 
-    // Stamp on app open
-    void supabase.rpc('update_last_seen', { user_id: id });
+    // Stamp on app open — .then() required, supabase builder is lazy
+    supabase.rpc('update_last_seen', { user_id: id }).then(() => {});
   }, []);
 
   // Stable reference so ActivityTracker's useEffect dependency works correctly
   const userId = session?.user?.id ?? null;
   const stampActivity = useCallback(() => {
-    if (userId) void supabase.rpc('update_last_seen', { user_id: userId });
+    if (userId) supabase.rpc('update_last_seen', { user_id: userId }).then(() => {});
   }, [userId]);
 
   const signIn = async (email: string, password: string) => {
@@ -118,7 +118,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const updateProfile = (updates: Partial<UserProfile>) => {
     if (!user) return;
     setUser({ ...user, ...updates });
-    void supabase.from('profiles').update(updates).eq('id', user.id);
+    supabase.from('profiles').update(updates).eq('id', user.id).then(() => {});
   };
 
   return (

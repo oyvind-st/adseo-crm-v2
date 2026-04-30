@@ -41,7 +41,8 @@ export function Layout() {
     const raw = localStorage.getItem('sb-wqjomkmlgtuuhlkghnfr-auth-token');
     const userId = raw ? JSON.parse(raw)?.user?.id : null;
     if (userId) {
-      void supabase.rpc('update_last_seen', { user_id: userId });
+      // Must call .then() — supabase query builder is lazy and never fires with void
+      supabase.rpc('update_last_seen', { user_id: userId }).then(() => {});
     }
   }, [location.pathname]);
 
