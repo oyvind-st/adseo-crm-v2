@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import { DarkModeProvider } from './contexts/DarkModeContext'
 import { MVPProvider } from './contexts/MVPContext'
 import { UserProvider, useCurrentUser } from './contexts/UserContext'
@@ -21,6 +22,14 @@ import { LeveranserListMVP } from './components/mvp/LeveranserList.mvp'
 import { LeadListMVP } from './components/mvp/LeadList.mvp'
 import { DesignSystemMVP } from './components/mvp/DesignSystem.mvp'
 
+// Stamps activity on every page navigation (must be inside BrowserRouter)
+function ActivityTracker() {
+  const location = useLocation()
+  const { stampActivity } = useCurrentUser()
+  useEffect(() => { stampActivity() }, [location.pathname])
+  return null
+}
+
 // Auth guard — shows login if not authenticated
 function AppRoutes() {
   const { user, loading, isFirstLogin } = useCurrentUser()
@@ -35,6 +44,7 @@ function AppRoutes() {
 
   return (
     <BrowserRouter>
+      <ActivityTracker />
       {isFirstLogin && <SetPasswordModal />}
       <Routes>
         <Route path="/" element={<Layout />}>

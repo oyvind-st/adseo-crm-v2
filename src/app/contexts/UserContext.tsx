@@ -16,6 +16,7 @@ interface UserContextType {
   loading: boolean;
   isFirstLogin: boolean;
   clearFirstLogin: () => void;
+  stampActivity: () => void;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => void;
   updateProfile: (updates: Partial<UserProfile>) => void;
@@ -26,6 +27,7 @@ const UserContext = createContext<UserContextType>({
   loading: false,
   isFirstLogin: false,
   clearFirstLogin: () => {},
+  stampActivity: () => {},
   signIn: async () => ({ error: null }),
   signOut: () => {},
   updateProfile: () => {},
@@ -87,12 +89,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {});
 
-    // Stamp activity immediately on load, then every 2 min while app is open
-    const stamp = () => void supabase.rpc('update_last_seen', { user_id: id });
-    stamp();
-    const interval = setInterval(stamp, 2 * 60 * 1000);
-    return () => clearInterval(interval);
+    // Stamp on app open
+    void supabase.rpc('update_last_seen', { user_id: id });
   }, []);
+
+  const stampActivity = () => {
+    if (session?.user?.id) {
+      void supabase.rpc('update_last_seen', { user_id: session.user.id });
+    }
+  };
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -117,7 +122,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <UserContext.Provider value={{ user, loading, isFirstLogin, clearFirstLogin, signIn, signOut, updateProfile }}>
+    <UserContext.Provider value={{ user, loading, isFirstLogin, clearFirstLogin, stampActivity, signIn, signOut, updateProfile }}>
       {children}
     </UserContext.Provider>
   );
