@@ -76,6 +76,7 @@ export function Settings() {
     }
 
     // Use admin client to invite — creates auth user and sends invite email
+    console.log('[invite] calling inviteUserByEmail for', inviteEmail);
     const { data: inviteData, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       inviteEmail,
       {
@@ -83,15 +84,18 @@ export function Settings() {
         data: { rolle: inviteRole }
       }
     );
+    console.log('[invite] result:', { inviteData, error });
 
     if (error) {
-      alert('Feil ved sending av invitasjon: ' + error.message);
+      console.error('[invite] error:', error);
+      alert('Feil ved sending av invitasjon: ' + error.message + '\n\nStatus: ' + (error as any).status);
     } else {
-      // Explicitly upsert the profile row — don't rely solely on the trigger
+      console.log('[invite] user id:', inviteData?.user?.id);
+      // Explicitly upsert the profile row using admin client
       if (inviteData?.user?.id) {
         const initials = inviteEmail.split('@')[0].substring(0, 2).toUpperCase();
         const navn = inviteEmail.split('@')[0];
-        await supabaseAdmin!.from('profiles').upsert({
+        const { error: profileError } = await supabaseAdmin!.from('profiles').upsert({
           id: inviteData.user.id,
           epost: inviteEmail,
           navn,
@@ -99,6 +103,7 @@ export function Settings() {
           status: 'active',
           avatar_initials: initials
         }, { onConflict: 'id' });
+        console.log('[invite] profile upsert error:', profileError);
       }
       alert('Invitasjon sendt til ' + inviteEmail + '! De mottar en e-post med innloggingslenke.');
     }
