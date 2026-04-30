@@ -87,10 +87,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {});
 
-    // Update last-seen timestamp (fire and forget)
-    void supabase.from('profiles')
-      .update({ sist_innlogget: new Date().toISOString() })
-      .eq('id', id);
+    // Update last-seen timestamp via security-definer RPC (bypasses RLS)
+    void supabase.rpc('update_last_seen', { user_id: id });
   }, []);
 
   const signIn = async (email: string, password: string) => {
