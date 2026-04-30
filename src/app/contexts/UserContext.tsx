@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase, isFromMagicLink } from '../../lib/supabase';
 
 interface UserProfile {
@@ -93,11 +93,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
     void supabase.rpc('update_last_seen', { user_id: id });
   }, []);
 
-  const stampActivity = () => {
-    if (session?.user?.id) {
-      void supabase.rpc('update_last_seen', { user_id: session.user.id });
-    }
-  };
+  // Stable reference so ActivityTracker's useEffect dependency works correctly
+  const userId = session?.user?.id ?? null;
+  const stampActivity = useCallback(() => {
+    if (userId) void supabase.rpc('update_last_seen', { user_id: userId });
+  }, [userId]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });

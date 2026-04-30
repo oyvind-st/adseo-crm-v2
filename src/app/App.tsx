@@ -26,7 +26,8 @@ import { DesignSystemMVP } from './components/mvp/DesignSystem.mvp'
 function ActivityTracker() {
   const location = useLocation()
   const { stampActivity } = useCurrentUser()
-  useEffect(() => { stampActivity() }, [location.pathname])
+  // Both deps included — stampActivity is stable (useCallback), location.pathname changes on nav
+  useEffect(() => { stampActivity() }, [location.pathname, stampActivity])
   return null
 }
 
