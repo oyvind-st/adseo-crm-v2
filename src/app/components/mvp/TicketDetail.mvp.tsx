@@ -209,13 +209,10 @@ export function TicketDetailMVP() {
     }
   };
 
-  const handleOpenAddContact = (senderStr: string) => {
-    setAddContactPrefill(senderStr);
-    if (isEmailAddress(senderStr)) {
-      setAddContactForm({ navn: '', tittel: '', epost: senderStr, telefon: '' });
-    } else {
-      setAddContactForm({ navn: senderStr, tittel: '', epost: '', telefon: '' });
-    }
+  // fra is always an email address — pre-fill epost directly
+  const handleOpenAddContact = (email: string) => {
+    setAddContactPrefill(email);
+    setAddContactForm({ navn: '', tittel: '', epost: email, telefon: '' });
     setShowAddContactModal(true);
   };
 
@@ -618,18 +615,14 @@ export function TicketDetailMVP() {
                   <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-6">Ingen meldinger ennå</p>
                 )}
                 {conversation.map((message, index) => {
-                  // Priority: 1) ticket's linked contact overrides everything for customer messages
-                  // 2) match by name/email in customerContacts
-                  // 3) unknown email → show "Legg til kontakt"
-                  // 4) unknown name with no match → just show name
+                  // fra is always an email for customer messages.
+                  // Priority: 1) ticket's linked contact (kontakt_id) → use their name + email
+                  //           2) match customerContacts by email address
+                  //           3) unknown → show raw email + "Legg til kontakt"
                   const ticketContact = supaTicket?.kontakter ?? null;
                   const resolvedContact: any = message.type === 'customer'
-                    ? ticketContact
-                      || customerContacts.find(c => c.navn === message.from || c.epost === message.from)
+                    ? ticketContact || customerContacts.find(c => c.epost === message.from)
                     : null;
-
-                  // Determine if this is a genuinely unknown sender (no linked contact, from looks like email)
-                  const unknownEmail = message.type === 'customer' && !resolvedContact && isEmailAddress(message.from);
 
                   return (
                   <div
@@ -650,27 +643,26 @@ export function TicketDetailMVP() {
                         <div>
                           {message.type === 'customer' ? (
                             resolvedContact ? (
-                              // Known contact — show name + email
+                              // Known contact — name on top, email underneath
                               <div>
                                 <p className="text-sm font-medium text-slate-900 dark:text-white">{resolvedContact.navn}</p>
-                                {resolvedContact.epost && (
-                                  <p className="text-xs text-slate-400 dark:text-slate-500">{resolvedContact.epost}</p>
-                                )}
-                              </div>
-                            ) : unknownEmail ? (
-                              // Unknown email address — offer to add
-                              <div>
-                                <p className="text-sm font-medium text-slate-900 dark:text-white">{message.from}</p>
-                                <button
-                                  onClick={() => handleOpenAddContact(message.from)}
-                                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                                >
-                                  + Legg til som kontakt
-                                </button>
+                                <p className="text-xs text-slate-400 dark:text-slate-500">
+                                  {resolvedContact.epost || message.from}
+                                </p>
                               </div>
                             ) : (
-                              // Name present but no matched contact and no linked contact
-                              <p className="text-sm font-medium text-slate-900 dark:text-white">{message.from}</p>
+                              // Unknown sender — show raw email + offer to add
+                              <div>
+                                <p className="text-sm font-medium text-slate-900 dark:text-white">{message.from}</p>
+                                {currentCustomerId && (
+                                  <button
+                                    onClick={() => handleOpenAddContact(message.from)}
+                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                                  >
+                                    + Legg til som kontakt
+                                  </button>
+                                )}
+                              </div>
                             )
                           ) : (
                             <p className="text-sm font-medium text-slate-900 dark:text-white">{message.from}</p>
