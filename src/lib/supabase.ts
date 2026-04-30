@@ -5,10 +5,16 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY
 
 // Admin client — only used for privileged operations (invite user, etc.)
-// This is an internal-only app behind authentication, so this is acceptable.
+// Uses a no-op storage so it never conflicts with the main client's session.
+const noopStorage = {
+  getItem: (_key: string) => null,
+  setItem: (_key: string, _value: string) => {},
+  removeItem: (_key: string) => {},
+};
+
 export const supabaseAdmin = supabaseServiceKey
   ? createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { persistSession: false, autoRefreshToken: false }
+      auth: { persistSession: false, autoRefreshToken: false, storage: noopStorage }
     })
   : null;
 
