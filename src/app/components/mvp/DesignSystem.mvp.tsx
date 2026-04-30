@@ -11,6 +11,7 @@ import {
   StatCard, PageHeader,
   EmptyState, Loading, Skeleton,
   TicketRow,
+  LeveranseRow,
 } from '../shared'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -236,6 +237,46 @@ export function DesignSystemMVP() {
             kunder={{ bedriftsnavn: 'E-commerce Pro AS' }}
             created_at={new Date(Date.now() - 3600000 * 1).toISOString()}
             last
+          />
+        </div>
+      </Section>
+
+      {/* ── LEVERANSE ROW ── */}
+      <Section title="LeveranseRow — gjenbrukbar leveranse-rad">
+        <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700">
+          <LeveranseRow
+            id="demo-1"
+            customer="Nordic Tech AS"
+            type="Hjemmeside"
+            status="in_progress"
+            progress={45}
+            tasksCompleted={4}
+            tasksTotal={9}
+            responsible="Ola Nordmann"
+            deadline="30. mai 2026"
+            hasUnreadTickets
+          />
+          <LeveranseRow
+            id="demo-2"
+            customer="Green Energy Norway"
+            type="Nettbutikk"
+            status="not_started"
+            progress={0}
+            tasksCompleted={0}
+            tasksTotal={12}
+            responsible="Kari Jensen"
+            deadline="15. juni 2026"
+          />
+          <LeveranseRow
+            id="demo-3"
+            customer="Tech Startup AS"
+            type="Google Ads oppsett"
+            status="completed"
+            progress={100}
+            tasksCompleted={5}
+            tasksTotal={5}
+            responsible="Kari Jensen"
+            deadline="1. mai 2026"
           />
         </div>
       </Section>

@@ -2,37 +2,17 @@
 // Adapted: mock data → Supabase, status keys mapped to DB values
 
 import { useState, useEffect } from 'react';
-import { Plus, Package, Clock, CheckCircle2, AlertCircle, ArrowRight, User, Ticket as TicketIcon } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Plus, Package, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
+import { LeveranseRow } from '../shared';
 
 // DB status → Figma status
 const toFigmaStatus = (s: string) => {
-  if (s === 'ikke_startet')    return 'not_started';
-  if (s === 'pagar')           return 'in_progress';
-  if (s === 'venter_pa_kunde') return 'waiting';
-  if (s === 'ferdig')          return 'completed';
-  return s;
-};
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'not_started': return 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300';
-    case 'in_progress': return 'bg-blue-100 text-blue-700';
-    case 'waiting':     return 'bg-yellow-100 text-yellow-700';
-    case 'completed':   return 'bg-green-100 text-green-700';
-    default:            return 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300';
-  }
-};
-
-const getStatusLabel = (status: string) => {
-  switch (status) {
-    case 'not_started': return 'Ikke startet';
-    case 'in_progress': return 'Pågår';
-    case 'waiting':     return 'Venter på kunde';
-    case 'completed':   return 'Ferdig';
-    default:            return status;
-  }
+  if (s === 'ikke_startet')    return 'not_started' as const;
+  if (s === 'pagar')           return 'in_progress' as const;
+  if (s === 'venter_pa_kunde') return 'waiting' as const;
+  if (s === 'ferdig')          return 'completed' as const;
+  return 'not_started' as const;
 };
 
 export function LeveranserListMVP() {
@@ -181,72 +161,7 @@ export function LeveranserListMVP() {
           {filteredLeveranser.length === 0 ? (
             <div className="p-10 text-center text-sm text-slate-400">Ingen leveranser</div>
           ) : filteredLeveranser.map((leveranse) => (
-            <div
-              key={leveranse.id}
-              onClick={() => navigate(`/leveranser/${leveranse.id}`)}
-              className="px-6 py-4 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
-                    <Package className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold text-slate-900 dark:text-white">{leveranse.customer}</h3>
-                      {leveranse.type && (
-                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-xs font-medium">
-                          {leveranse.type}
-                        </span>
-                      )}
-                      {leveranse.hasUnreadTickets && (
-                        <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium flex items-center gap-1">
-                          <TicketIcon className="w-3 h-3" />
-                          Nye tickets
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
-                      {leveranse.responsible && (
-                        <span className="flex items-center gap-1.5">
-                          <User className="w-3.5 h-3.5" />
-                          {leveranse.responsible}
-                        </span>
-                      )}
-                      {leveranse.responsible && leveranse.deadline && <span>•</span>}
-                      {leveranse.deadline && (
-                        <span className="flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5" />
-                          Frist: {leveranse.deadline}
-                        </span>
-                      )}
-                      {(leveranse.responsible || leveranse.deadline) && leveranse.tasksTotal > 0 && <span>•</span>}
-                      {leveranse.tasksTotal > 0 && (
-                        <span>{leveranse.tasksCompleted} av {leveranse.tasksTotal} oppgaver</span>
-                      )}
-                    </div>
-                    {/* Progress bar */}
-                    <div className="mt-2 flex items-center gap-3">
-                      <div className="flex-1 bg-slate-100 dark:bg-slate-700 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full transition-all"
-                          style={{ width: `${leveranse.progress}%` }}
-                        />
-                      </div>
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300 min-w-[3rem] text-right">
-                        {leveranse.progress}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 ml-4 flex-shrink-0">
-                  <span className={`px-3 py-1 rounded text-sm font-medium ${getStatusColor(leveranse.status)}`}>
-                    {getStatusLabel(leveranse.status)}
-                  </span>
-                  <ArrowRight className="w-5 h-5 text-slate-400" />
-                </div>
-              </div>
-            </div>
+            <LeveranseRow key={leveranse.id} {...leveranse} />
           ))}
         </div>
       </div>
