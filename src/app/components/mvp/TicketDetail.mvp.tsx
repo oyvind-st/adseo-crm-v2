@@ -677,8 +677,40 @@ export function TicketDetailMVP() {
                         </div>
                         <span className="text-xs text-slate-500 dark:text-slate-400">{message.timestamp}</span>
                       </div>
-                      {/* CC indicator */}
-                      {message.cc && (
+                      {/* CC recipients — per address with add-contact option */}
+                      {message.type === 'customer' && message.cc && (
+                        <div className="ml-10 mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">CC:</span>
+                          {message.cc.split(',').map((addr: string) => {
+                            const email = addr.trim();
+                            if (!email) return null;
+                            const known = customerContacts.find(c => c.epost === email);
+                            return (
+                              <span key={email} className="flex items-center gap-1 text-xs">
+                                {known ? (
+                                  <span className="text-slate-600 dark:text-slate-300 font-medium">
+                                    {known.navn} <span className="font-normal text-slate-400">&lt;{email}&gt;</span>
+                                  </span>
+                                ) : (
+                                  <>
+                                    <span className="text-slate-500 dark:text-slate-400">{email}</span>
+                                    {currentCustomerId && (
+                                      <button
+                                        onClick={() => handleOpenAddContact(email)}
+                                        className="text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
+                                      >
+                                        + legg til
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {/* CC on agent replies */}
+                      {message.type === 'agent' && message.cc && (
                         <p className="text-xs text-slate-400 dark:text-slate-500 mb-2 ml-10">
                           CC: {message.cc}
                         </p>
@@ -736,9 +768,26 @@ export function TicketDetailMVP() {
                           <Mail className="w-4 h-4 text-slate-400 shrink-0" />
                           <span className="text-slate-500 dark:text-slate-400 shrink-0">Til:</span>
                           <span className="text-slate-900 dark:text-white font-medium flex-1 truncate">{replyDisplay}</span>
-                          <button onClick={() => setShowCC(v => !v)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0">
-                            {showCC ? 'Skjul CC' : '+ CC'}
-                          </button>
+                          {(() => {
+                            const allCC = conversation
+                              .filter(m => m.type === 'customer' && m.cc)
+                              .flatMap((m: any) => m.cc.split(',').map((a: string) => a.trim()))
+                              .filter(Boolean);
+                            const uniqueCC = [...new Set(allCC)];
+                            return (
+                              <button
+                                onClick={() => {
+                                  if (!showCC && !replyCC && uniqueCC.length > 0) {
+                                    setReplyCC(uniqueCC.join(', '));
+                                  }
+                                  setShowCC(v => !v);
+                                }}
+                                className="text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0"
+                              >
+                                {showCC ? 'Skjul CC' : uniqueCC.length > 0 ? `+ CC (${uniqueCC.length})` : '+ CC'}
+                              </button>
+                            );
+                          })()}
                         </div>
                         {showCC && (
                           <div className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-900 px-3 py-2 rounded border border-slate-200 dark:border-slate-700">
