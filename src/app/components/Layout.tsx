@@ -26,6 +26,7 @@ import {
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { useMVPMode } from '../contexts/MVPContext';
 import { useCurrentUser } from '../contexts/UserContext';
+import { supabase } from '../../lib/supabase';
 
 export function Layout() {
   const location = useLocation();
@@ -33,11 +34,15 @@ export function Layout() {
   const [searchQuery, setSearchQuery] = useState('');
   const { isDarkMode, toggleDarkMode } = useDarkMode();
   const { isMVPMode, toggleMVPMode } = useMVPMode();
-  const { user, signOut, stampActivity } = useCurrentUser();
+  const { user, signOut } = useCurrentUser();
 
-  // Stamp activity on every page navigation
+  // Stamp activity directly on every page navigation
   useEffect(() => {
-    stampActivity();
+    const raw = localStorage.getItem('sb-wqjomkmlgtuuhlkghnfr-auth-token');
+    const userId = raw ? JSON.parse(raw)?.user?.id : null;
+    if (userId) {
+      void supabase.rpc('update_last_seen', { user_id: userId });
+    }
   }, [location.pathname]);
 
   const isActive = (path: string) => {
