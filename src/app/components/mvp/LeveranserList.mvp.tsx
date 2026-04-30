@@ -16,7 +16,6 @@ const toFigmaStatus = (s: string) => {
 };
 
 export function LeveranserListMVP() {
-  const navigate = useNavigate();
   const [filterStatus, setFilterStatus] = useState<'all' | 'not_started' | 'in_progress' | 'waiting' | 'completed'>('all');
   const [leveranser, setLeveranser] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
