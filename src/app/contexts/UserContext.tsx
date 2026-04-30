@@ -68,7 +68,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     window.history.replaceState(null, '', window.location.pathname);
   };
 
-  // Load real profile from DB and stamp sist_innlogget on every app load
+  // Load real profile from DB and start activity tracking
   useEffect(() => {
     if (!session?.user?.id) return;
     const id = session.user.id;
@@ -87,8 +87,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {});
 
-    // Update last-seen timestamp via security-definer RPC (bypasses RLS)
-    void supabase.rpc('update_last_seen', { user_id: id });
+    // Stamp activity immediately on load, then every 2 min while app is open
+    const stamp = () => void supabase.rpc('update_last_seen', { user_id: id });
+    stamp();
+    const interval = setInterval(stamp, 2 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const signIn = async (email: string, password: string) => {
