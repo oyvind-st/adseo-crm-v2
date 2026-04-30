@@ -23,21 +23,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 
-  // Invite the user — creates auth entry and sends invite email
+  const appUrl = process.env.APP_URL || 'https://adseo-crm-v2.vercel.app';
+
+  // Try invite first; if user already exists, send a magic link instead
+  let userId: string | undefined;
   const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
     email,
-    { redirectTo: process.env.APP_URL || 'https://adseo-crm-v2.vercel.app', data: { rolle, navn } }
+    { redirectTo: appUrl, data: { rolle, navn } }
   );
 
   if (inviteError) {
-    return res.status(400).json({ error: inviteError.message });
+    if (inviteError.message.includes('already been registered')) {
+      // User exists — generate a magic link so they can log in and set a password
+      const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+        type: 'magiclink',
+        email,
+        options: { redirectTo: appUrl }
+      });
+      if (linkError) return res.status(400).json({ error: linkError.message });
+      userId = linkData?.user?.id;
+    } else {
+      return res.status(400).json({ error: inviteError.message });
+    }
+  } else {
+    userId = inviteData?.user?.id;
   }
 
   // Upsert profile row so user appears in the app immediately
-  if (inviteData?.user?.id) {
+  if (userId) {
     const initials = (navn || email).substring(0, 2).toUpperCase();
     await admin.from('profiles').upsert({
-      id: inviteData.user.id,
+      id: userId,
       epost: email,
       navn: navn || email.split('@')[0],
       rolle: rolle || 'selger',
@@ -46,5 +62,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }, { onConflict: 'id' });
   }
 
-  return res.status(200).json({ success: true, userId: inviteData?.user?.id });
+  return res.status(200).json({ success: true, userId });
 }
