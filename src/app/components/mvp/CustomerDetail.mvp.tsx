@@ -45,6 +45,8 @@ import { TaskItem } from '../TaskItem';
 import { DateTimePicker } from '../DateTimePicker';
 import { supabase } from '../../../lib/supabase';
 import { Button, Avatar, Badge, PriorityBadge, StatusBadge, Loading, Card } from '../shared';
+import { useProfiles } from '../../../lib/useProfiles';
+import { useCurrentUser } from '../../contexts/UserContext';
 
 // ─── Shared activity icon/label helpers ──────────────────────────────────────
 const ACTIVITY_META: Record<string, { label: string; iconClass: string; bgClass: string }> = {
@@ -510,7 +512,7 @@ export function CustomerDetailMVP() {
         id: n.id,
         title: n.tittel,
         content: n.beskrivelse || n.tittel,
-        author: n.utfort_av_navn || 'Ola Nordmann',
+        author: n.utfort_av_navn || 'Ukjent',
         date: new Date(n.created_at),
         type: n.type || 'notat',
       }));
@@ -518,7 +520,7 @@ export function CustomerDetailMVP() {
         id: `task-${t.id}`,
         title: t.tittel,
         content: t.beskrivelse || '',
-        author: 'Ola Nordmann',
+        author: t.utfort_av_navn || 'Ukjent',
         date: new Date(t.created_at),
         type: 'oppgave_fullfort',
       }));
@@ -595,7 +597,9 @@ export function CustomerDetailMVP() {
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
-  const teamMembers = ['Ola Nordmann', 'Kari Jensen', 'Per Hansen', 'Nina Olsen'];
+  const { profiles } = useProfiles();
+  const { user: currentUser } = useCurrentUser();
+  const teamMembers = profiles.map(p => p.navn);
 
   const tabs = [
     { id: 'overview', label: 'Oversikt', icon: Building2 },
@@ -635,7 +639,7 @@ export function CustomerDetailMVP() {
       type: quickLogData.activityType || 'notat',
       tittel: quickLogData.activityType || 'Aktivitet',
       beskrivelse: quickLogData.note,
-      utfort_av_navn: customer.owner || 'Ola Nordmann'
+      utfort_av_navn: currentUser?.navn || customer.owner || 'Ukjent'
     }).then(({ data }) => {
       if (data) setNotes([{ ...newNoteData, id: data[0]?.id || newNoteData.id }, ...notes]);
       else setNotes([newNoteData, ...notes]);
@@ -682,7 +686,7 @@ export function CustomerDetailMVP() {
       type: 'notat',
       tittel: 'Internt notat',
       beskrivelse: contentToSave,
-      utfort_av_navn: 'Ola Nordmann'
+      utfort_av_navn: currentUser?.navn || 'Ukjent'
     }).select().single();
 
     if (error) {
@@ -695,7 +699,7 @@ export function CustomerDetailMVP() {
       const note = {
         id: data.id,
         content: data.beskrivelse,
-        author: data.utfort_av_navn || 'Ola Nordmann',
+        author: data.utfort_av_navn || 'Ukjent',
         date: new Date(data.created_at || Date.now()),
         type: data.type,
         attachments: []

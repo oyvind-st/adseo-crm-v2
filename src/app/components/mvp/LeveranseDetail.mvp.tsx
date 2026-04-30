@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useProfiles } from '../../../lib/useProfiles';
+import { useCurrentUser } from '../../contexts/UserContext';
 import {
   ArrowLeft,
   Building2,
@@ -176,7 +178,8 @@ export function LeveranseDetailMVP() {
   const [editingTemplateName, setEditingTemplateName] = useState('');
   const [editingTemplatePhases, setEditingTemplatePhases] = useState<PhaseTemplate[]>([]);
 
-  const teamMembers = ['Ola Nordmann', 'Kari Jensen', 'Per Hansen', 'Nina Olsen'];
+  const { profiles } = useProfiles();
+  const { user: currentUser } = useCurrentUser();
 
   // Mock data (non-editable)
   const leveranse = {
@@ -361,7 +364,7 @@ export function LeveranseDetailMVP() {
   const [newTaskData, setNewTaskData] = useState({
     title: '',
     description: '',
-    assignee: 'Ola Nordmann',
+    assignee: '',
     estimatedDays: 1,
     priority: 'medium' as 'low' | 'medium' | 'high'
   });
@@ -444,7 +447,7 @@ export function LeveranseDetailMVP() {
     const newActivity = {
       id: String(activities.length + 1),
       type: 'comment',
-      user: 'Ola Nordmann', // Current user
+      user: currentUser?.navn || 'Ukjent', // Current user
       message: newComment,
       timestamp: 'Akkurat nå'
     };
@@ -844,10 +847,9 @@ export function LeveranseDetailMVP() {
                 onChange={(e) => handleChangeMainResponsible(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {teamMembers.map((member) => (
-                  <option key={member} value={member}>
-                    {member}
-                  </option>
+                <option value="">— Velg ansvarlig</option>
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.navn}>{p.navn}</option>
                 ))}
               </select>
             </div>
@@ -1274,7 +1276,7 @@ export function LeveranseDetailMVP() {
                     showCustomer={false}
                     showService={false}
                     showStatus={false}
-                    teamMembers={teamMembers}
+                    teamMembers={profiles.map(p => p.navn)}
                     onReassign={(assignee) => {
                       handleEditTask(task.id, { assignee });
                     }}
@@ -1450,8 +1452,9 @@ export function LeveranseDetailMVP() {
                     onChange={(e) => setEditingTask({ ...editingTask, assignee: e.target.value })}
                     className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {teamMembers.map((member) => (
-                      <option key={member} value={member}>{member}</option>
+                    <option value="">— Velg ansvarlig</option>
+                    {profiles.map((p) => (
+                      <option key={p.id} value={p.navn}>{p.navn}</option>
                     ))}
                   </select>
                 </div>
@@ -1575,8 +1578,9 @@ export function LeveranseDetailMVP() {
                     onChange={(e) => setNewTaskData({ ...newTaskData, assignee: e.target.value })}
                     className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {teamMembers.map((member) => (
-                      <option key={member} value={member}>{member}</option>
+                    <option value="">— Velg ansvarlig</option>
+                    {profiles.map((p) => (
+                      <option key={p.id} value={p.navn}>{p.navn}</option>
                     ))}
                   </select>
                 </div>
