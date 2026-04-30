@@ -4,6 +4,8 @@ import { ArrowLeft, Building2, User, Calendar, Mail, Send, X, Paperclip, CheckSq
 import { DateTimePicker } from '../DateTimePicker';
 import { supabase } from '../../../lib/supabase';
 
+const isEmailAddress = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+
 export function TicketDetailMVP() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -33,6 +35,11 @@ export function TicketDetailMVP() {
   const [customerActivityData, setCustomerActivityData] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Add contact modal state
+  const [showAddContactModal, setShowAddContactModal] = useState(false);
+  const [addContactPrefill, setAddContactPrefill] = useState('');
+  const [addContactForm, setAddContactForm] = useState({ navn: '', tittel: '', epost: '', telefon: '' });
 
   // Load all customers for the dropdown
   useEffect(() => {
@@ -200,6 +207,37 @@ export function TicketDetailMVP() {
     if (ticket) {
       await supabase.from('tickets').update({ kunde_id: customerId }).eq('id', ticket.id);
     }
+  };
+
+  const handleOpenAddContact = (senderStr: string) => {
+    setAddContactPrefill(senderStr);
+    if (isEmailAddress(senderStr)) {
+      setAddContactForm({ navn: '', tittel: '', epost: senderStr, telefon: '' });
+    } else {
+      setAddContactForm({ navn: senderStr, tittel: '', epost: '', telefon: '' });
+    }
+    setShowAddContactModal(true);
+  };
+
+  const handleSaveNewContact = async () => {
+    if (!addContactForm.navn.trim() || !currentCustomerId) return;
+    await supabase.from('kontakter').insert({
+      kunde_id: currentCustomerId,
+      navn: addContactForm.navn,
+      tittel: addContactForm.tittel,
+      epost: addContactForm.epost,
+      telefon: addContactForm.telefon,
+      er_primaer: false
+    });
+    // Reload contacts
+    const { data } = await supabase.from('kontakter')
+      .select('id, navn, tittel, epost, telefon, er_primaer')
+      .eq('kunde_id', currentCustomerId)
+      .order('er_primaer', { ascending: false });
+    if (data) setCustomerContacts(data);
+    setShowAddContactModal(false);
+    setAddContactForm({ navn: '', tittel: '', epost: '', telefon: '' });
+    setAddContactPrefill('');
   };
 
   const templates = [
@@ -579,7 +617,11 @@ export function TicketDetailMVP() {
                 {conversation.length === 0 && (
                   <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-6">Ingen meldinger ennå</p>
                 )}
-                {conversation.map((message, index) => (
+                {conversation.map((message, index) => {
+                  const matchedContact = message.type === 'customer'
+                    ? customerContacts.find(c => c.navn === message.from || c.epost === message.from)
+                    : null;
+                  return (
                   <div
                     key={message.id}
                     className={`flex ${message.type === 'agent' ? 'justify-end' : 'justify-start'}`}
@@ -596,7 +638,33 @@ export function TicketDetailMVP() {
                           <User className="w-4 h-4" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-slate-900 dark:text-white">{message.from}</p>
+                          {message.type === 'customer' ? (
+                            matchedContact ? (
+                              <div>
+                                <p className="text-sm font-medium text-slate-900 dark:text-white">{matchedContact.navn}</p>
+                                {matchedContact.epost && (
+                                  <p className="text-xs text-slate-400 dark:text-slate-500">{matchedContact.epost}</p>
+                                )}
+                              </div>
+                            ) : isEmailAddress(message.from) ? (
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium text-slate-900 dark:text-white">{message.from}</p>
+                                <button
+                                  onClick={() => handleOpenAddContact(message.from)}
+                                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
+                                >
+                                  + Legg til kontakt
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-sm font-medium text-slate-900 dark:text-white">{message.from}</p>
+                                <span className="text-xs text-slate-400 dark:text-slate-500">(ukjent)</span>
+                              </div>
+                            )
+                          ) : (
+                            <p className="text-sm font-medium text-slate-900 dark:text-white">{message.from}</p>
+                          )}
                         </div>
                         <span className="text-xs text-slate-500 dark:text-slate-400">{message.timestamp}</span>
                       </div>
@@ -609,7 +677,8 @@ export function TicketDetailMVP() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Reply Section */}
@@ -1033,6 +1102,60 @@ export function TicketDetailMVP() {
               >
                 <CheckSquare className="w-4 h-4" />
                 Opprett oppgave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Contact Modal */}
+      {showAddContactModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Legg til kontaktperson</h2>
+              <button onClick={() => setShowAddContactModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
+            </div>
+            {!currentCustomerId && <p className="text-sm text-amber-600 mb-4">Koble ticketen til en kunde først.</p>}
+            <div className="space-y-3">
+              <input
+                placeholder="Navn *"
+                value={addContactForm.navn}
+                onChange={e => setAddContactForm(f => ({ ...f, navn: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                placeholder="Tittel / rolle"
+                value={addContactForm.tittel}
+                onChange={e => setAddContactForm(f => ({ ...f, tittel: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                placeholder="E-post"
+                value={addContactForm.epost}
+                onChange={e => setAddContactForm(f => ({ ...f, epost: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                placeholder="Telefon"
+                value={addContactForm.telefon}
+                onChange={e => setAddContactForm(f => ({ ...f, telefon: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setShowAddContactModal(false)}
+                className="flex-1 px-4 py-2 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-sm"
+              >
+                Avbryt
+              </button>
+              <button
+                onClick={handleSaveNewContact}
+                disabled={!addContactForm.navn || !currentCustomerId}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                Lagre kontakt
               </button>
             </div>
           </div>

@@ -532,6 +532,57 @@ export function CustomerDetailMVP() {
   const [showAddContact, setShowAddContact] = useState(false);
   const [showAddService, setShowAddService] = useState(false);
 
+  // Contact CRUD state
+  const [supaContacts, setSupaContacts] = useState<any[]>([]);
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  const [contactForm, setContactForm] = useState({ navn: '', tittel: '', epost: '', telefon: '', er_primaer: false });
+
+  // Load contacts from Supabase
+  useEffect(() => {
+    if (!id) return;
+    supabase.from('kontakter')
+      .select('*')
+      .eq('kunde_id', id)
+      .order('er_primaer', { ascending: false })
+      .then(({ data }) => { if (data) setSupaContacts(data); });
+  }, [id]);
+
+  const handleSaveContact = async () => {
+    if (!contactForm.navn.trim()) return;
+    if (editingContactId === 'new') {
+      const { data, error } = await supabase.from('kontakter').insert({
+        kunde_id: id,
+        navn: contactForm.navn,
+        tittel: contactForm.tittel,
+        epost: contactForm.epost,
+        telefon: contactForm.telefon,
+        er_primaer: contactForm.er_primaer
+      }).select().single();
+      if (!error && data) {
+        const { data: refreshed } = await supabase.from('kontakter').select('*').eq('kunde_id', id).order('er_primaer', { ascending: false });
+        if (refreshed) setSupaContacts(refreshed);
+      }
+    } else if (editingContactId) {
+      await supabase.from('kontakter').update({
+        navn: contactForm.navn,
+        tittel: contactForm.tittel,
+        epost: contactForm.epost,
+        telefon: contactForm.telefon,
+        er_primaer: contactForm.er_primaer
+      }).eq('id', editingContactId);
+      const { data: refreshed } = await supabase.from('kontakter').select('*').eq('kunde_id', id).order('er_primaer', { ascending: false });
+      if (refreshed) setSupaContacts(refreshed);
+    }
+    setEditingContactId(null);
+    setContactForm({ navn: '', tittel: '', epost: '', telefon: '', er_primaer: false });
+  };
+
+  const handleDeleteContact = async (contactId: string) => {
+    if (!confirm('Er du sikker på at du vil slette denne kontaktpersonen?')) return;
+    await supabase.from('kontakter').delete().eq('id', contactId);
+    setSupaContacts(prev => prev.filter(c => c.id !== contactId));
+  };
+
   // Google Drive integration state
   const [driveConnected, setDriveConnected] = useState(false);
   const [driveLoading, setDriveLoading] = useState(false);
@@ -1129,38 +1180,220 @@ export function CustomerDetailMVP() {
                 <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
                   <h3 className="font-semibold text-slate-900 dark:text-white">Kontaktpersoner</h3>
                   <button
-                    onClick={() => setShowAddContact(!showAddContact)}
+                    onClick={() => {
+                      setEditingContactId('new');
+                      setContactForm({ navn: '', tittel: '', epost: '', telefon: '', er_primaer: false });
+                      setShowAddContact(true);
+                    }}
                     className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
                 </div>
+
+                {/* Inline add form */}
+                {editingContactId === 'new' && (
+                  <div className="border-t border-slate-100 dark:border-slate-700 px-6 py-4 space-y-3 bg-slate-50 dark:bg-slate-700/30">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Navn *</label>
+                      <input
+                        type="text"
+                        value={contactForm.navn}
+                        onChange={e => setContactForm(f => ({ ...f, navn: e.target.value }))}
+                        placeholder="Fullt navn"
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Tittel</label>
+                      <input
+                        type="text"
+                        value={contactForm.tittel}
+                        onChange={e => setContactForm(f => ({ ...f, tittel: e.target.value }))}
+                        placeholder="Stilling / rolle"
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">E-post</label>
+                      <input
+                        type="email"
+                        value={contactForm.epost}
+                        onChange={e => setContactForm(f => ({ ...f, epost: e.target.value }))}
+                        placeholder="epost@eksempel.no"
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Telefon</label>
+                      <input
+                        type="tel"
+                        value={contactForm.telefon}
+                        onChange={e => setContactForm(f => ({ ...f, telefon: e.target.value }))}
+                        placeholder="+47 000 00 000"
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={contactForm.er_primaer}
+                          onChange={e => setContactForm(f => ({ ...f, er_primaer: e.target.checked }))}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                        />
+                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Primærkontakt</span>
+                      </label>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={handleSaveContact}
+                        disabled={!contactForm.navn.trim()}
+                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        Lagre
+                      </button>
+                      <button
+                        onClick={() => { setEditingContactId(null); setContactForm({ navn: '', tittel: '', epost: '', telefon: '', er_primaer: false }); }}
+                        className="px-3 py-1.5 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-sm"
+                      >
+                        Avbryt
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {customer.contacts.map((contact, idx) => (
-                    <div key={idx} className="px-6 py-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="font-medium text-slate-900 dark:text-white">{contact.name}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{contact.title}</p>
+                  {supaContacts.map((contact) => (
+                    <div key={contact.id}>
+                      {editingContactId === contact.id ? (
+                        /* Inline edit form */
+                        <div className="px-6 py-4 space-y-3 bg-slate-50 dark:bg-slate-700/30">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Navn *</label>
+                            <input
+                              type="text"
+                              value={contactForm.navn}
+                              onChange={e => setContactForm(f => ({ ...f, navn: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Tittel</label>
+                            <input
+                              type="text"
+                              value={contactForm.tittel}
+                              onChange={e => setContactForm(f => ({ ...f, tittel: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">E-post</label>
+                            <input
+                              type="email"
+                              value={contactForm.epost}
+                              onChange={e => setContactForm(f => ({ ...f, epost: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Telefon</label>
+                            <input
+                              type="tel"
+                              value={contactForm.telefon}
+                              onChange={e => setContactForm(f => ({ ...f, telefon: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={contactForm.er_primaer}
+                                onChange={e => setContactForm(f => ({ ...f, er_primaer: e.target.checked }))}
+                                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                              />
+                              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Primærkontakt</span>
+                            </label>
+                          </div>
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={handleSaveContact}
+                              disabled={!contactForm.navn.trim()}
+                              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              Lagre
+                            </button>
+                            <button
+                              onClick={() => { setEditingContactId(null); setContactForm({ navn: '', tittel: '', epost: '', telefon: '', er_primaer: false }); }}
+                              className="px-3 py-1.5 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg text-sm"
+                            >
+                              Avbryt
+                            </button>
+                          </div>
                         </div>
-                        {contact.isPrimary && (
-                          <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs rounded-full">
-                            Primær
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-3 space-y-1">
-                        <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
-                          <Mail className="w-3 h-3" />
-                          {contact.email}
-                        </a>
-                        <a href={`tel:${contact.phone}`} className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
-                          <Phone className="w-3 h-3" />
-                          {contact.phone}
-                        </a>
-                      </div>
+                      ) : (
+                        /* Display row */
+                        <div className="px-6 py-4">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="font-medium text-slate-900 dark:text-white">{contact.navn}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400">{contact.tittel}</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {contact.er_primaer && (
+                                <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs rounded-full mr-1">
+                                  Primær
+                                </span>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setEditingContactId(contact.id);
+                                  setContactForm({
+                                    navn: contact.navn || '',
+                                    tittel: contact.tittel || '',
+                                    epost: contact.epost || '',
+                                    telefon: contact.telefon || '',
+                                    er_primaer: contact.er_primaer || false
+                                  });
+                                }}
+                                className="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded transition-colors"
+                                title="Rediger"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteContact(contact.id)}
+                                className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded transition-colors"
+                                title="Slett"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="mt-3 space-y-1">
+                            {contact.epost && (
+                              <a href={`mailto:${contact.epost}`} className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                                <Mail className="w-3 h-3" />
+                                {contact.epost}
+                              </a>
+                            )}
+                            {contact.telefon && (
+                              <a href={`tel:${contact.telefon}`} className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                                <Phone className="w-3 h-3" />
+                                {contact.telefon}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
+                  {supaContacts.length === 0 && editingContactId !== 'new' && (
+                    <div className="px-6 py-6 text-center text-sm text-slate-400">
+                      Ingen kontaktpersoner registrert ennå.
+                    </div>
+                  )}
                 </div>
               </div>
 
