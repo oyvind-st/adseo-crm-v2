@@ -618,9 +618,19 @@ export function TicketDetailMVP() {
                   <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-6">Ingen meldinger ennå</p>
                 )}
                 {conversation.map((message, index) => {
-                  const matchedContact = message.type === 'customer'
-                    ? customerContacts.find(c => c.navn === message.from || c.epost === message.from)
+                  // Priority: 1) ticket's linked contact overrides everything for customer messages
+                  // 2) match by name/email in customerContacts
+                  // 3) unknown email → show "Legg til kontakt"
+                  // 4) unknown name with no match → just show name
+                  const ticketContact = supaTicket?.kontakter ?? null;
+                  const resolvedContact: any = message.type === 'customer'
+                    ? ticketContact
+                      || customerContacts.find(c => c.navn === message.from || c.epost === message.from)
                     : null;
+
+                  // Determine if this is a genuinely unknown sender (no linked contact, from looks like email)
+                  const unknownEmail = message.type === 'customer' && !resolvedContact && isEmailAddress(message.from);
+
                   return (
                   <div
                     key={message.id}
@@ -639,28 +649,28 @@ export function TicketDetailMVP() {
                         </div>
                         <div>
                           {message.type === 'customer' ? (
-                            matchedContact ? (
+                            resolvedContact ? (
+                              // Known contact — show name + email
                               <div>
-                                <p className="text-sm font-medium text-slate-900 dark:text-white">{matchedContact.navn}</p>
-                                {matchedContact.epost && (
-                                  <p className="text-xs text-slate-400 dark:text-slate-500">{matchedContact.epost}</p>
+                                <p className="text-sm font-medium text-slate-900 dark:text-white">{resolvedContact.navn}</p>
+                                {resolvedContact.epost && (
+                                  <p className="text-xs text-slate-400 dark:text-slate-500">{resolvedContact.epost}</p>
                                 )}
                               </div>
-                            ) : isEmailAddress(message.from) ? (
-                              <div className="flex items-center gap-2">
+                            ) : unknownEmail ? (
+                              // Unknown email address — offer to add
+                              <div>
                                 <p className="text-sm font-medium text-slate-900 dark:text-white">{message.from}</p>
                                 <button
                                   onClick={() => handleOpenAddContact(message.from)}
-                                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
+                                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
                                 >
-                                  + Legg til kontakt
+                                  + Legg til som kontakt
                                 </button>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-1.5">
-                                <p className="text-sm font-medium text-slate-900 dark:text-white">{message.from}</p>
-                                <span className="text-xs text-slate-400 dark:text-slate-500">(ukjent)</span>
-                              </div>
+                              // Name present but no matched contact and no linked contact
+                              <p className="text-sm font-medium text-slate-900 dark:text-white">{message.from}</p>
                             )
                           ) : (
                             <p className="text-sm font-medium text-slate-900 dark:text-white">{message.from}</p>
