@@ -87,11 +87,18 @@ export function Settings() {
     if (error) {
       alert('Feil ved sending av invitasjon: ' + error.message);
     } else {
-      // Update profile with role if trigger created it with defaults
+      // Explicitly upsert the profile row — don't rely solely on the trigger
       if (inviteData?.user?.id) {
-        await supabase.from('profiles')
-          .update({ rolle: inviteRole })
-          .eq('id', inviteData.user.id);
+        const initials = inviteEmail.split('@')[0].substring(0, 2).toUpperCase();
+        const navn = inviteEmail.split('@')[0];
+        await supabaseAdmin!.from('profiles').upsert({
+          id: inviteData.user.id,
+          epost: inviteEmail,
+          navn,
+          rolle: inviteRole,
+          status: 'active',
+          avatar_initials: initials
+        }, { onConflict: 'id' });
       }
       alert('Invitasjon sendt til ' + inviteEmail + '! De mottar en e-post med innloggingslenke.');
     }
