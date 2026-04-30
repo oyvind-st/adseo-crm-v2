@@ -50,8 +50,8 @@ export function Settings() {
   const [sendingLinkFor, setSendingLinkFor] = useState<string | null>(null);
   const [sentLinkFor, setSentLinkFor] = useState<string | null>(null);
 
-  // Load users from Supabase profiles
-  useEffect(() => {
+  // Load users — wait briefly so UserContext RPC has time to update sist_innlogget first
+  const loadUsers = () => {
     supabase.from('profiles').select('*').order('created_at')
       .then(({ data }) => {
         if (data) setUsers(data.map(u => ({
@@ -61,11 +61,22 @@ export function Settings() {
           phone: u.telefon || '',
           role: u.rolle || 'selger',
           status: u.status || 'active',
-          lastLogin: u.sist_innlogget ? new Date(u.sist_innlogget).toLocaleDateString('no-NO') : 'Aldri',
+          // Show current time for self if DB value is missing (race condition guard)
+          lastLogin: u.id === currentUser?.id && !u.sist_innlogget
+            ? new Date().toLocaleDateString('no-NO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : u.sist_innlogget
+            ? new Date(u.sist_innlogget).toLocaleDateString('no-NO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : 'Aldri',
           created: u.created_at ? new Date(u.created_at).toLocaleDateString('no-NO') : '—'
         })));
         setUsersLoading(false);
       });
+  };
+
+  useEffect(() => {
+    // Short delay so update_last_seen RPC from UserContext completes first
+    const t = setTimeout(loadUsers, 600);
+    return () => clearTimeout(t);
   }, []);
 
   const handleInviteUser = async () => {
