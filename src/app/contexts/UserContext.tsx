@@ -88,10 +88,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
       .catch(() => {});
 
     // Update last-seen timestamp (fire and forget)
-    supabase.from('profiles')
+    void supabase.from('profiles')
       .update({ sist_innlogget: new Date().toISOString() })
-      .eq('id', id)
-      .catch(() => {});
+      .eq('id', id);
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -113,7 +112,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const updateProfile = (updates: Partial<UserProfile>) => {
     if (!user) return;
     setUser({ ...user, ...updates });
-    supabase.from('profiles').update(updates).eq('id', user.id).catch(() => {});
+    void supabase.from('profiles').update(updates).eq('id', user.id);
   };
 
   return (
