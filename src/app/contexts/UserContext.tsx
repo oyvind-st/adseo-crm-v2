@@ -68,10 +68,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
     window.history.replaceState(null, '', window.location.pathname);
   };
 
-  // Load real profile from DB in background (non-blocking, won't affect data loading)
+  // Load real profile from DB and stamp sist_innlogget on every app load
   useEffect(() => {
     if (!session?.user?.id) return;
-    supabase.from('profiles').select('*').eq('id', session.user.id).single()
+    const id = session.user.id;
+
+    supabase.from('profiles').select('*').eq('id', id).single()
       .then(({ data }) => {
         if (data) {
           setUser(prev => prev ? {
@@ -83,7 +85,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
           } : prev);
         }
       })
-      .catch(() => {}); // Silently ignore errors
+      .catch(() => {});
+
+    // Update last-seen timestamp (fire and forget)
+    supabase.from('profiles')
+      .update({ sist_innlogget: new Date().toISOString() })
+      .eq('id', id)
+      .catch(() => {});
   }, []);
 
   const signIn = async (email: string, password: string) => {
