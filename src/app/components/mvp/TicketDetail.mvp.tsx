@@ -11,6 +11,8 @@ export function TicketDetailMVP() {
   const navigate = useNavigate();
   const location = useLocation();
   const [replyText, setReplyText] = useState('');
+  const [replyCC, setReplyCC] = useState('');
+  const [showCC, setShowCC] = useState(false);
   const [internalNote, setInternalNote] = useState('');
   const [attachments, setAttachments] = useState<Array<{ name: string; size: number; url?: string }>>([]);
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -125,6 +127,7 @@ export function TicketDetailMVP() {
           id: m.id,
           type: m.type,
           from: m.fra,
+          cc: m.cc_epost || null,
           message: m.melding,
           timestamp: new Date(m.created_at).toLocaleString('no-NO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
         })));
@@ -308,25 +311,29 @@ export function TicketDetailMVP() {
   const handleSendReply = async () => {
     if (!replyText.trim() || !ticket) return;
     const msgText = replyText;
+    const ccValue = replyCC.trim() || null;
     setReplyText('');
+    setReplyCC('');
+    setShowCC(false);
     setAttachments([]);
 
     const newMsg = {
       id: String(Date.now()),
       type: 'agent' as const,
       from: 'Ola Nordmann',
+      cc: ccValue,
       message: msgText,
       timestamp: 'Akkurat nå'
     };
     setConversation(prev => [...prev, newMsg]);
     setCurrentStatus('In progress');
 
-    // Persist to database
     await supabase.from('ticket_meldinger').insert({
       ticket_id: ticket.id,
       type: 'agent',
       fra: 'Ola Nordmann',
-      melding: msgText
+      melding: msgText,
+      cc_epost: ccValue
     });
   };
 
@@ -670,9 +677,13 @@ export function TicketDetailMVP() {
                         </div>
                         <span className="text-xs text-slate-500 dark:text-slate-400">{message.timestamp}</span>
                       </div>
-                      <div className={`bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4 shadow-sm ${
-                        message.type === 'agent' ? 'ml-10' : 'ml-10'
-                      }`}>
+                      {/* CC indicator */}
+                      {message.cc && (
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mb-2 ml-10">
+                          CC: {message.cc}
+                        </p>
+                      )}
+                      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4 shadow-sm ml-10">
                         <div className="text-slate-700 dark:text-slate-300 whitespace-pre-line">
                           {message.message}
                         </div>
@@ -713,10 +724,38 @@ export function TicketDetailMVP() {
                   </div>
                 )}
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 px-3 py-2 rounded">
-                    <Mail className="w-4 h-4" />
-                    <span>Til: {ticket.contact} ({ticket.contactEmail})</span>
-                  </div>
+                  {/* To / CC header — derived dynamically from linked contact or last message */}
+                  {(() => {
+                    const lastCustomer = [...conversation].reverse().find(m => m.type === 'customer');
+                    const replyEmail = supaTicket?.kontakter?.epost || lastCustomer?.from || ticket.contactEmail || '';
+                    const replyContact = customerContacts.find(c => c.epost === replyEmail) || supaTicket?.kontakter;
+                    const replyDisplay = replyContact ? `${replyContact.navn} <${replyEmail}>` : replyEmail || '—';
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-900 px-3 py-2 rounded border border-slate-200 dark:border-slate-700">
+                          <Mail className="w-4 h-4 text-slate-400 shrink-0" />
+                          <span className="text-slate-500 dark:text-slate-400 shrink-0">Til:</span>
+                          <span className="text-slate-900 dark:text-white font-medium flex-1 truncate">{replyDisplay}</span>
+                          <button onClick={() => setShowCC(v => !v)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0">
+                            {showCC ? 'Skjul CC' : '+ CC'}
+                          </button>
+                        </div>
+                        {showCC && (
+                          <div className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-900 px-3 py-2 rounded border border-slate-200 dark:border-slate-700">
+                            <Mail className="w-4 h-4 text-slate-400 shrink-0" />
+                            <span className="text-slate-500 dark:text-slate-400 shrink-0">CC:</span>
+                            <input
+                              type="text"
+                              value={replyCC}
+                              onChange={e => setReplyCC(e.target.value)}
+                              placeholder="epost@eksempel.no, epost2@eksempel.no"
+                              className="flex-1 bg-transparent text-slate-900 dark:text-white outline-none text-sm"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <textarea
                     ref={textareaRef}
                     value={replyText}
