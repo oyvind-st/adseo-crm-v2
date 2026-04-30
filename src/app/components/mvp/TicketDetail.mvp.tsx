@@ -3,10 +3,14 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Building2, User, Calendar, Mail, Send, X, Paperclip, CheckSquare, Plus, FileText, Clock, MessageSquare, History, Zap, Tag, Search, PhoneIncoming, PhoneOff, Video, Activity, CheckCircle, UserPlus } from 'lucide-react';
 import { DateTimePicker } from '../DateTimePicker';
 import { supabase } from '../../../lib/supabase';
+import { useProfiles } from '../../../lib/useProfiles';
+import { useCurrentUser } from '../../contexts/UserContext';
 
 const isEmailAddress = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
 export function TicketDetailMVP() {
+  const { user: currentUser } = useCurrentUser();
+  const { profiles } = useProfiles();
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -26,7 +30,7 @@ export function TicketDetailMVP() {
     title: '',
     description: '',
     dueDate: '',
-    assignee: 'Ola Nordmann'
+    assignee: ''
   });
   const [supaTicket, setSupaTicket] = useState<any>(null);
   const [supaLoading, setSupaLoading] = useState(true);
@@ -93,13 +97,13 @@ export function TicketDetailMVP() {
       const logEntries = (logData || []).map(n => ({
         id: n.id, type: n.type || 'notat',
         title: n.tittel, content: n.beskrivelse,
-        author: n.utfort_av_navn || 'Ola Nordmann',
+        author: n.utfort_av_navn || currentUser?.navn || 'Ukjent',
         date: new Date(n.created_at)
       }));
       const taskEntries = (taskData || []).map(t => ({
         id: `task-${t.id}`, type: 'oppgave_fullfort',
         title: t.tittel, content: null,
-        author: 'Ola Nordmann',
+        author: currentUser?.navn || 'Ukjent',
         date: new Date(t.created_at)
       }));
       const merged = [...logEntries, ...taskEntries]
@@ -113,7 +117,7 @@ export function TicketDetailMVP() {
   useEffect(() => {
     if (!id) return;
     supabase.from('tickets')
-      .select('*, kunder(id, bedriftsnavn, sted, nettside), kontakter(id, navn, tittel, epost, telefon)')
+      .select('*, kunder(id, bedriftsnavn, sted, nettside), kontakter(id, navn, tittel, epost, telefon), ansvarlig:ansvarlig_id(id, navn, epost, avatar_initials)')
       .eq('id', id).single()
       .then(({ data }) => { setSupaTicket(data); setSupaLoading(false); });
 
@@ -166,7 +170,7 @@ export function TicketDetailMVP() {
     category: supaTicket.kategori || '',
     priority: supaTicket.prioritet === 'høy' ? 'high' : supaTicket.prioritet === 'medium' ? 'medium' : 'low',
     status: supaTicket.status === 'apent' ? 'Open' : supaTicket.status === 'pagar' ? 'In progress' : supaTicket.status === 'venter_pa_kunde' ? 'Waiting for customer' : 'Resolved',
-    assignee: 'Ola Nordmann',
+    assignee: supaTicket.ansvarlig?.navn || '',
     opened: new Date(supaTicket.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric' }),
     openedDate: new Date(supaTicket.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
     lastResponse: conversation.length > 0
@@ -185,7 +189,7 @@ export function TicketDetailMVP() {
         : supaTicket.status === 'venter_pa_kunde' ? 'Waiting for customer'
         : 'Resolved'
       );
-      setCurrentAssignee('Ola Nordmann');
+      setCurrentAssignee(supaTicket.ansvarlig?.navn || '');
       setCurrentCustomerId(supaTicket.kunder?.id || '');
     }
   }, [supaTicket?.id]);
@@ -212,8 +216,6 @@ export function TicketDetailMVP() {
       </div>
     );
   }
-
-  const teamMembers = ['Ola Nordmann', 'Kari Jensen', 'Per Hansen', 'Nina Olsen'];
 
   const filteredCustomers = supaCustomers.filter((customer) =>
     customer.name.toLowerCase().includes(customerSearchQuery.toLowerCase())
@@ -281,14 +283,14 @@ export function TicketDetailMVP() {
       id: '1',
       type: 'status_change',
       message: 'Status endret fra "Åpen" til "Pågår"',
-      user: 'Ola Nordmann',
+      user: currentUser?.navn || 'Ukjent',
       timestamp: '3 timer siden'
     },
     {
       id: '2',
       type: 'reply',
       message: 'Sendt svar til kunde',
-      user: 'Ola Nordmann',
+      user: currentUser?.navn || 'Ukjent',
       timestamp: '3 timer siden'
     },
     {
@@ -335,10 +337,18 @@ export function TicketDetailMVP() {
     setShowCC(false);
     setAttachments([]);
 
+    const senderName = currentUser?.navn || 'Ukjent';
+
+    // Auto-assign if no assignee
+    if (!currentAssignee && currentUser && ticket) {
+      setCurrentAssignee(currentUser.navn);
+      await supabase.from('tickets').update({ ansvarlig_id: currentUser.id }).eq('id', ticket.id);
+    }
+
     const newMsg = {
       id: String(Date.now()),
       type: 'agent' as const,
-      from: 'Ola Nordmann',
+      from: senderName,
       cc: ccValue,
       message: msgText,
       timestamp: 'Akkurat nå'
@@ -349,7 +359,7 @@ export function TicketDetailMVP() {
     await supabase.from('ticket_meldinger').insert({
       ticket_id: ticket.id,
       type: 'agent',
-      fra: 'Ola Nordmann',
+      fra: senderName,
       melding: msgText,
       cc_epost: ccValue
     });
@@ -361,7 +371,7 @@ export function TicketDetailMVP() {
     setInternalNotes([
       {
         id: String(Date.now()),
-        author: 'Ola Nordmann',
+        author: currentUser?.navn || 'Ukjent',
         message: internalNote,
         timestamp: 'Akkurat nå'
       },
@@ -422,7 +432,7 @@ export function TicketDetailMVP() {
       title: '',
       description: '',
       dueDate: '',
-      assignee: 'Ola Nordmann'
+      assignee: ''
     });
   };
 
@@ -506,15 +516,30 @@ export function TicketDetailMVP() {
                 </label>
                 <select
                   value={currentAssignee}
-                  onChange={(e) => setCurrentAssignee(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onChange={async (e) => {
+                    const selectedNavn = e.target.value;
+                    setCurrentAssignee(selectedNavn);
+                    if (ticket) {
+                      const profile = profiles.find(p => p.navn === selectedNavn);
+                      await supabase.from('tickets').update({
+                        ansvarlig_id: profile?.id || null
+                      }).eq('id', ticket.id);
+                    }
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    !currentAssignee
+                      ? 'border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white'
+                  }`}
                 >
-                  {teamMembers.map((member) => (
-                    <option key={member} value={member}>
-                      {member}
-                    </option>
+                  <option value="">— Velg ansvarlig</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.navn}>{p.navn}</option>
                   ))}
                 </select>
+                {!currentAssignee && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Ingen ansvarlig valgt</p>
+                )}
               </div>
               <div className="relative">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -1162,10 +1187,9 @@ export function TicketDetailMVP() {
                     onChange={(e) => setNewTask({ ...newTask, assignee: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {teamMembers.map((member) => (
-                      <option key={member} value={member}>
-                        {member}
-                      </option>
+                    <option value="">— Velg ansvarlig</option>
+                    {profiles.map((p) => (
+                      <option key={p.id} value={p.navn}>{p.navn}</option>
                     ))}
                   </select>
                 </div>
