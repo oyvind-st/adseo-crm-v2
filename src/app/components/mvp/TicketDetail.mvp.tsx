@@ -685,10 +685,10 @@ export function TicketDetailMVP() {
                                   <button
                                     onClick={() => handleOpenAddContact(message.from)}
                                     title="Legg til som kontaktperson"
-                                    className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-xs text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 border border-transparent hover:border-blue-200 dark:hover:border-blue-800 transition-colors"
+                                    className="inline-flex items-center gap-1.5 mt-0.5 px-2 py-0.5 rounded-full bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500 transition-colors"
                                   >
-                                    <UserPlus className="w-3 h-3" />
-                                    <span>Legg til</span>
+                                    <Plus className="w-2.5 h-2.5 text-white" />
+                                    <span className="text-xs text-white font-medium">Legg til</span>
                                   </button>
                                 )}
                               </div>
@@ -720,9 +720,9 @@ export function TicketDetailMVP() {
                                       <button
                                         onClick={() => handleOpenAddContact(email)}
                                         title="Legg til som kontaktperson"
-                                        className="p-0.5 rounded text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                                        className="w-4 h-4 rounded-full bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500 flex items-center justify-center transition-colors shrink-0"
                                       >
-                                        <UserPlus className="w-3 h-3" />
+                                        <Plus className="w-2.5 h-2.5 text-white" />
                                       </button>
                                     )}
                                   </span>
