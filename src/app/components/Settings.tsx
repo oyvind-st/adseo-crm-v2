@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { supabase, supabaseAdmin } from '../../lib/supabase';
 import { useCurrentUser } from '../contexts/UserContext';
 import {
   Users,
@@ -69,19 +69,30 @@ export function Settings() {
     if (!inviteEmail.trim()) return;
     setInviting(true);
 
-    // Send magic link — creates user in Supabase Auth if not exists
-    const { error } = await supabase.auth.signInWithOtp({
-      email: inviteEmail,
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: window.location.origin,
+    if (!supabaseAdmin) {
+      alert('Mangler admin-tilgang. Sjekk VITE_SUPABASE_SERVICE_KEY i .env');
+      setInviting(false);
+      return;
+    }
+
+    // Use admin client to invite — creates auth user and sends invite email
+    const { data: inviteData, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+      inviteEmail,
+      {
+        redirectTo: window.location.origin,
         data: { rolle: inviteRole }
       }
-    });
+    );
 
     if (error) {
       alert('Feil ved sending av invitasjon: ' + error.message);
     } else {
+      // Update profile with role if trigger created it with defaults
+      if (inviteData?.user?.id) {
+        await supabase.from('profiles')
+          .update({ rolle: inviteRole })
+          .eq('id', inviteData.user.id);
+      }
       alert('Invitasjon sendt til ' + inviteEmail + '! De mottar en e-post med innloggingslenke.');
     }
 
@@ -90,7 +101,16 @@ export function Settings() {
 
     // Reload users
     const { data } = await supabase.from('profiles').select('*').order('created_at');
-    if (data) setUsers(data.map(u => ({ id: u.id, name: u.navn || u.epost?.split('@')[0] || '—', email: u.epost || '', phone: u.telefon || '', role: u.rolle || 'selger', status: u.status || 'active', lastLogin: u.sist_innlogget ? new Date(u.sist_innlogget).toLocaleDateString('no-NO') : 'Aldri', created: u.created_at ? new Date(u.created_at).toLocaleDateString('no-NO') : '—' })));
+    if (data) setUsers(data.map(u => ({
+      id: u.id,
+      name: u.navn || u.epost?.split('@')[0] || '—',
+      email: u.epost || '',
+      phone: u.telefon || '',
+      role: u.rolle || 'selger',
+      status: u.status || 'active',
+      lastLogin: u.sist_innlogget ? new Date(u.sist_innlogget).toLocaleDateString('no-NO') : 'Aldri',
+      created: u.created_at ? new Date(u.created_at).toLocaleDateString('no-NO') : '—'
+    })));
   };
 
   // TODO: Backend - Fetch roles from database

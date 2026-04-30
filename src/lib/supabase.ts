@@ -2,6 +2,15 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY
+
+// Admin client — only used for privileged operations (invite user, etc.)
+// This is an internal-only app behind authentication, so this is acceptable.
+export const supabaseAdmin = supabaseServiceKey
+  ? createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    })
+  : null;
 
 // Detect magic link callback BEFORE Supabase processes and clears the URL hash
 export const isFromMagicLink =
