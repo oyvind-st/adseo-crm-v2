@@ -1,14 +1,4 @@
-// Based directly on Figma source: leveranser/page.tsx
-// CSS class mappings from globals.css:
-//   .stat-card        → bg-white rounded-xl border border-slate-200 p-5
-//   .badge-gray       → bg-slate-100 text-slate-600
-//   .badge-blue       → bg-blue-100 text-blue-700
-//   .badge-yellow     → bg-yellow-100 text-yellow-700
-//   .badge-green      → bg-green-100 text-green-700
-//   .progress-bar     → h-1 bg-slate-200 rounded-full overflow-hidden
-//   .progress-fill    → h-full bg-violet-600 (Figma primary = #7c3aed)
-//   .tab.active       → text-violet-700 border-b-2 border-violet-700 (purple, not blue!)
-//   .btn-primary      → bg-violet-700 hover:bg-violet-800
+// Based on Figma source: leveranser/page.tsx
 
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -22,7 +12,6 @@ const STATUS_LABEL: Record<string, string> = {
   ferdig:          'Ferdig',
 }
 
-// From globals.css badge colours
 const STATUS_BADGE: Record<string, string> = {
   ikke_startet:    'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
   pagar:           'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
@@ -55,28 +44,27 @@ export function LeveranserListMVP() {
       .then(({ data }) => { setLeveranser(data || []); setLoading(false) })
   }, [])
 
-  const filtered = leveranser.filter(l => {
-    if (activeTab === 'Alle') return true
-    return l.status === TAB_TO_STATUS[activeTab]
-  })
+  const filtered = leveranser.filter(l =>
+    activeTab === 'Alle' || l.status === TAB_TO_STATUS[activeTab]
+  )
 
   return (
-    <div className="p-8">
-      {/* Header — from Figma */}
-      <div className="flex items-start justify-between mb-6">
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Leveranser</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {leveranser.filter(l => l.status !== 'ferdig').length} aktive leveranser
           </p>
         </div>
-        <button className="bg-violet-700 hover:bg-violet-800 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-1.5 transition-colors">
+        <button className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-1.5 transition-colors">
           <Plus size={16} /> Ny leveranse
         </button>
       </div>
 
-      {/* Stat cards — .stat-card from globals.css */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      {/* Stat cards */}
+      <div className="grid grid-cols-4 gap-4">
         {(['ikke_startet', 'pagar', 'venter_pa_kunde', 'ferdig'] as const).map(s => (
           <div key={s} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 px-6 py-5">
             <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">{STATUS_LABEL[s]}</div>
@@ -87,18 +75,18 @@ export function LeveranserListMVP() {
         ))}
       </div>
 
-      {/* Card container */}
+      {/* Main card with tabs + rows */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
 
-        {/* Tab list — .tab-list / .tab / .tab.active from globals.css, active = violet */}
-        <div className="flex border-b border-slate-200 dark:border-slate-700 px-5">
+        {/* Tabs — matching TicketList blue active style */}
+        <div className="flex border-b border-slate-200 dark:border-slate-700 px-2">
           {TABS.map(t => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
-              className={`px-5 py-2.5 text-sm whitespace-nowrap transition-all border-b-2 ${
+              className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition-all border-b-2 -mb-px ${
                 activeTab === t
-                  ? 'text-violet-700 dark:text-violet-400 border-violet-700 dark:border-violet-400 font-medium'
+                  ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400'
                   : 'text-slate-500 dark:text-slate-400 border-transparent hover:text-slate-700 dark:hover:text-slate-300'
               }`}
             >
@@ -125,11 +113,10 @@ export function LeveranserListMVP() {
                 i < filtered.length - 1 ? ' border-b border-slate-100 dark:border-slate-700' : ''
               }`}
             >
-              {/* Row header */}
               <div className="flex items-center justify-between mb-2.5">
-                {/* Left: square icon + name + title */}
+                {/* Left: icon + customer + title */}
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-9 h-9 bg-violet-100 dark:bg-violet-900/30 rounded-lg flex items-center justify-center text-base flex-shrink-0">
+                  <div className="w-9 h-9 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center text-base flex-shrink-0">
                     📦
                   </div>
                   <div className="min-w-0">
@@ -155,11 +142,11 @@ export function LeveranserListMVP() {
                 </div>
               </div>
 
-              {/* Progress bar — .progress-bar / .progress-fill, fill = violet */}
+              {/* Progress bar — from Figma .progress-bar / .progress-fill */}
               <div className="h-1 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all"
-                  style={{ width: `${progress}%`, background: '#7c3aed' }}
+                  style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #3b82f6, #6366f1)' }}
                 />
               </div>
               <div className="text-xs text-slate-400 dark:text-slate-500 mt-1 text-right">
