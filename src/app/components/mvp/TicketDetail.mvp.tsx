@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, Building2, User, Calendar, Mail, Send, X, Paperclip, CheckSquare, Plus, FileText, Clock, MessageSquare, History, Zap, Tag, Search } from 'lucide-react';
+import { ArrowLeft, Building2, User, Calendar, Mail, Send, X, Paperclip, CheckSquare, Plus, FileText, Clock, MessageSquare, History, Zap, Tag, Search, PhoneIncoming, PhoneOff, Video, Activity, CheckCircle } from 'lucide-react';
 import { DateTimePicker } from '../DateTimePicker';
 import { supabase } from '../../../lib/supabase';
 
@@ -67,13 +67,37 @@ export function TicketDetailMVP() {
       .limit(5)
       .then(({ data }) => { if (data) setRelatedTicketsData(data); });
 
-    // Recent activity: latest tasks for this customer
-    supabase.from('oppgaver')
-      .select('id, tittel, status, prioritet, frist, created_at')
-      .eq('kunde_id', currentCustomerId)
-      .order('created_at', { ascending: false })
-      .limit(5)
-      .then(({ data }) => { if (data) setCustomerActivityData(data); });
+    // Recent activity: aktivitetslogg + completed oppgaver merged
+    Promise.all([
+      supabase.from('aktivitetslogg')
+        .select('id, type, tittel, beskrivelse, utfort_av_navn, created_at')
+        .eq('kunde_id', currentCustomerId)
+        .order('created_at', { ascending: false })
+        .limit(8),
+      supabase.from('oppgaver')
+        .select('id, tittel, created_at')
+        .eq('kunde_id', currentCustomerId)
+        .eq('status', 'fullfort')
+        .order('created_at', { ascending: false })
+        .limit(5)
+    ]).then(([{ data: logData }, { data: taskData }]) => {
+      const logEntries = (logData || []).map(n => ({
+        id: n.id, type: n.type || 'notat',
+        title: n.tittel, content: n.beskrivelse,
+        author: n.utfort_av_navn || 'Ola Nordmann',
+        date: new Date(n.created_at)
+      }));
+      const taskEntries = (taskData || []).map(t => ({
+        id: `task-${t.id}`, type: 'oppgave_fullfort',
+        title: t.tittel, content: null,
+        author: 'Ola Nordmann',
+        date: new Date(t.created_at)
+      }));
+      const merged = [...logEntries, ...taskEntries]
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        .slice(0, 8);
+      setCustomerActivityData(merged);
+    });
   }, [currentCustomerId]);
 
   // Fetch real ticket from Supabase
@@ -797,41 +821,53 @@ export function TicketDetailMVP() {
                 })()}
             </div>
 
-            {/* Activity Log — recent tasks for this customer */}
+            {/* Activity Log — aktivitetslogg + completed oppgaver */}
             <div className="py-6 border-b border-slate-200 dark:border-slate-700">
               <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">
                 Aktivitetslogg
               </h3>
               {customerActivityData.length === 0 ? (
                 <p className="text-xs text-slate-400 italic">
-                  {currentCustomerId ? 'Ingen oppgaver registrert' : 'Velg en kunde for å se aktivitet'}
+                  {currentCustomerId ? 'Ingen aktivitet logget' : 'Velg en kunde for å se aktivitet'}
                 </p>
               ) : (
                 <div className="space-y-3">
-                  {customerActivityData.map((task) => {
-                    const statusColor = task.status === 'fullfort'
-                      ? 'bg-green-500'
-                      : task.status === 'pagar'
-                      ? 'bg-blue-500'
-                      : 'bg-slate-300 dark:bg-slate-600';
-                    const statusLabel = task.status === 'fullfort' ? 'Fullført'
-                      : task.status === 'pagar' ? 'Pågår' : 'Ikke startet';
+                  {customerActivityData.map((entry) => {
+                    const icons: Record<string, { el: JSX.Element; bg: string }> = {
+                      call_answered:    { el: <PhoneIncoming className="w-3.5 h-3.5 text-green-600" />, bg: 'bg-green-100 dark:bg-green-900/30' },
+                      call_no_answer:   { el: <PhoneOff className="w-3.5 h-3.5 text-yellow-600" />, bg: 'bg-yellow-100 dark:bg-yellow-900/30' },
+                      email:            { el: <Mail className="w-3.5 h-3.5 text-blue-600" />, bg: 'bg-blue-100 dark:bg-blue-900/30' },
+                      meeting:          { el: <Video className="w-3.5 h-3.5 text-purple-600" />, bg: 'bg-purple-100 dark:bg-purple-900/30' },
+                      oppgave_fullfort: { el: <CheckCircle className="w-3.5 h-3.5 text-green-600" />, bg: 'bg-green-100 dark:bg-green-900/30' },
+                      notat:            { el: <MessageSquare className="w-3.5 h-3.5 text-slate-500" />, bg: 'bg-slate-100 dark:bg-slate-700' },
+                    };
+                    const meta = icons[entry.type] || icons.notat;
+                    const labels: Record<string, string> = {
+                      call_answered: 'Ringte', call_no_answer: 'Ikke svar',
+                      email: 'E-post', meeting: 'Møte',
+                      oppgave_fullfort: 'Oppgave fullført', notat: 'Notat',
+                    };
+                    const dateStr = entry.date instanceof Date
+                      ? entry.date.toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })
+                      : '';
                     return (
-                      <div key={task.id} className="flex gap-3">
-                        <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${statusColor}`} />
+                      <div key={entry.id} className="flex gap-2.5">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${meta.bg}`}>
+                          {meta.el}
+                        </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-slate-900 dark:text-white truncate">{task.tittel}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs text-slate-500 dark:text-slate-400">{statusLabel}</span>
-                            {task.frist && (
-                              <>
-                                <span className="text-xs text-slate-400">•</span>
-                                <span className="text-xs text-slate-500 dark:text-slate-400">
-                                  Frist: {new Date(task.frist).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })}
-                                </span>
-                              </>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                              {labels[entry.type] || 'Aktivitet'}
+                            </span>
+                            {entry.title && entry.type !== 'notat' && (
+                              <span className="text-xs text-slate-700 dark:text-slate-300 truncate">— {entry.title}</span>
                             )}
                           </div>
+                          {entry.content && (
+                            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 line-clamp-2">{entry.content}</p>
+                          )}
+                          <p className="text-xs text-slate-400 mt-0.5">{entry.author} · {dateStr}</p>
                         </div>
                       </div>
                     );

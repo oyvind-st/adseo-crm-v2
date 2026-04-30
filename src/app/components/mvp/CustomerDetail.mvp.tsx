@@ -46,6 +46,55 @@ import { DateTimePicker } from '../DateTimePicker';
 import { supabase } from '../../../lib/supabase';
 import { Button, Avatar, Badge, PriorityBadge, StatusBadge, Loading, Card } from '../shared';
 
+// ─── Shared activity icon/label helpers ──────────────────────────────────────
+const ACTIVITY_META: Record<string, { label: string; iconClass: string; bgClass: string }> = {
+  call_answered:    { label: 'Ringte', iconClass: 'text-green-600 dark:text-green-400', bgClass: 'bg-green-100 dark:bg-green-900/30' },
+  call_no_answer:   { label: 'Ikke svar', iconClass: 'text-yellow-600 dark:text-yellow-400', bgClass: 'bg-yellow-100 dark:bg-yellow-900/30' },
+  email:            { label: 'E-post', iconClass: 'text-blue-600 dark:text-blue-400', bgClass: 'bg-blue-100 dark:bg-blue-900/30' },
+  meeting:          { label: 'Møte', iconClass: 'text-purple-600 dark:text-purple-400', bgClass: 'bg-purple-100 dark:bg-purple-900/30' },
+  notat:            { label: 'Notat', iconClass: 'text-slate-500 dark:text-slate-400', bgClass: 'bg-slate-100 dark:bg-slate-700' },
+  oppgave_fullfort: { label: 'Oppgave fullført', iconClass: 'text-green-600 dark:text-green-400', bgClass: 'bg-green-100 dark:bg-green-900/30' },
+  other:            { label: 'Aktivitet', iconClass: 'text-slate-500 dark:text-slate-400', bgClass: 'bg-slate-100 dark:bg-slate-700' },
+};
+
+function ActivityIcon({ type }: { type: string }) {
+  const meta = ACTIVITY_META[type] || ACTIVITY_META.other;
+  if (type === 'call_answered') return <PhoneIncoming className={`w-4 h-4 ${meta.iconClass}`} />;
+  if (type === 'call_no_answer') return <PhoneOff className={`w-4 h-4 ${meta.iconClass}`} />;
+  if (type === 'email') return <Mail className={`w-4 h-4 ${meta.iconClass}`} />;
+  if (type === 'meeting') return <Video className={`w-4 h-4 ${meta.iconClass}`} />;
+  if (type === 'oppgave_fullfort') return <CheckCircle className={`w-4 h-4 ${meta.iconClass}`} />;
+  return <Activity className={`w-4 h-4 ${meta.iconClass}`} />;
+}
+
+function ActivityEntry({ entry, detailed = false }: { entry: any; detailed?: boolean }) {
+  const meta = ACTIVITY_META[entry.type] || ACTIVITY_META.other;
+  const dateStr = entry.date instanceof Date && !isNaN(entry.date.getTime())
+    ? entry.date.toLocaleDateString('no-NO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : 'Akkurat nå';
+  return (
+    <div className="px-6 py-4 flex items-start gap-3">
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${meta.bgClass}`}>
+        <ActivityIcon type={entry.type} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            {meta.label}
+          </span>
+          {entry.title && entry.type !== 'notat' && (
+            <span className="text-sm font-medium text-slate-900 dark:text-white truncate">{entry.title}</span>
+          )}
+        </div>
+        {entry.content && (entry.type === 'notat' || detailed) && (
+          <p className="text-sm text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-wrap">{entry.content}</p>
+        )}
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{entry.author} · {dateStr}</p>
+      </div>
+    </div>
+  );
+}
+
 export function CustomerDetailMVP() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -443,25 +492,40 @@ export function CustomerDetailMVP() {
 
   const [notes, setNotes] = useState<any[]>([]);
 
-  // Load notes from Supabase
+  // Load full activity log: aktivitetslogg + completed oppgaver, merged and sorted
   useEffect(() => {
     if (!id) return;
-    supabase.from('aktivitetslogg')
-      .select('*')
-      .eq('kunde_id', id)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        if (data) {
-          setNotes(data.map(n => ({
-            id: n.id,
-            content: n.beskrivelse || n.tittel,
-            author: n.utfort_av_navn || 'Ola Nordmann',
-            date: new Date(n.created_at),
-            type: n.type,
-            attachments: []
-          })));
-        }
-      });
+    Promise.all([
+      supabase.from('aktivitetslogg')
+        .select('*')
+        .eq('kunde_id', id)
+        .order('created_at', { ascending: false }),
+      supabase.from('oppgaver')
+        .select('id, tittel, beskrivelse, created_at')
+        .eq('kunde_id', id)
+        .eq('status', 'fullfort')
+        .order('created_at', { ascending: false })
+    ]).then(([{ data: logData }, { data: taskData }]) => {
+      const logEntries = (logData || []).map(n => ({
+        id: n.id,
+        title: n.tittel,
+        content: n.beskrivelse || n.tittel,
+        author: n.utfort_av_navn || 'Ola Nordmann',
+        date: new Date(n.created_at),
+        type: n.type || 'notat',
+      }));
+      const taskEntries = (taskData || []).map(t => ({
+        id: `task-${t.id}`,
+        title: t.tittel,
+        content: t.beskrivelse || '',
+        author: 'Ola Nordmann',
+        date: new Date(t.created_at),
+        type: 'oppgave_fullfort',
+      }));
+      const merged = [...logEntries, ...taskEntries]
+        .sort((a, b) => b.date.getTime() - a.date.getTime());
+      setNotes(merged);
+    });
   }, [id]);
 
   const [newNote, setNewNote] = useState({ content: '', attachments: [] as File[] });
@@ -487,7 +551,7 @@ export function CustomerDetailMVP() {
     { id: 'tickets', label: 'Tickets', icon: Ticket },
     { id: 'deals', label: 'Avtaler & Tjenester', icon: FileText },
     { id: 'documents', label: 'Dokumenter', icon: Folder },
-    { id: 'notes', label: 'Interne noter', icon: StickyNote }
+    { id: 'notes', label: 'Aktivitetslogg', icon: Activity }
   ];
 
   const handleDeleteTask = (taskId: string) => {
@@ -1039,33 +1103,20 @@ export function CustomerDetailMVP() {
 
               {/* Siste aktivitet */}
               <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+                <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
                   <h3 className="font-semibold text-slate-900 dark:text-white">Siste aktivitet</h3>
+                  <button
+                    onClick={() => setActiveTab('notes')}
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                  >Se hele loggen</button>
                 </div>
                 <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {customer.activities.map((activity, idx) => (
-                    <div key={idx} className="px-6 py-4">
-                      <div className="flex items-start gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                          activity.type === 'meeting' ? 'bg-blue-50 dark:bg-blue-900/30' :
-                          activity.type === 'email' ? 'bg-purple-50 dark:bg-purple-900/30' :
-                          'bg-green-50 dark:bg-green-900/30'
-                        }`}>
-                          {activity.type === 'meeting' ? (
-                            <Video className={`w-4 h-4 ${activity.type === 'meeting' ? 'text-blue-600 dark:text-blue-400' : ''}`} />
-                          ) : activity.type === 'email' ? (
-                            <MessageSquare className={`w-4 h-4 ${activity.type === 'email' ? 'text-purple-600 dark:text-purple-400' : ''}`} />
-                          ) : (
-                            <Activity className={`w-4 h-4 text-green-600 dark:text-green-400`} />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-slate-900 dark:text-white">{activity.title}</p>
-                          <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">{activity.description}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">{activity.date} • {activity.user}</p>
-                        </div>
-                      </div>
+                  {notes.length === 0 ? (
+                    <div className="px-6 py-8 text-center text-sm text-slate-400">
+                      Ingen aktivitet logget ennå. Bruk Hurtiglogg for å registrere kontakt.
                     </div>
+                  ) : notes.slice(0, 5).map((entry) => (
+                    <ActivityEntry key={entry.id} entry={entry} />
                   ))}
                 </div>
               </div>
@@ -1668,42 +1719,43 @@ export function CustomerDetailMVP() {
 
         {/* Notes Tab */}
         {activeTab === 'notes' && (
-          <div className="max-w-5xl space-y-6">
-            {/* Add Note */}
-            <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-6">
-              <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Legg til intern note</h3>
+          <div className="max-w-3xl space-y-6">
+            {/* Quick note */}
+            <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-5">
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-3">Legg til notat</h3>
               <textarea
                 value={newNote.content}
                 onChange={(e) => setNewNote({ ...newNote, content: e.target.value })}
-                rows={4}
-                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
-                placeholder="Skriv en intern note..."
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3 text-sm"
+                placeholder="Skriv et notat om kunden..."
               />
               <button
                 onClick={handleAddNote}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
               >
-                Lagre note
+                Lagre notat
               </button>
             </div>
 
-            {/* Notes List */}
+            {/* Full timeline */}
             <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
               <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
-                <h3 className="font-semibold text-slate-900 dark:text-white">Alle notater ({notes.length})</h3>
+                <h3 className="font-semibold text-slate-900 dark:text-white">
+                  Alle aktiviteter ({notes.length})
+                </h3>
               </div>
-              <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                {notes.map((note) => (
-                  <div key={note.id} className="px-6 py-4">
-                    <p className="text-slate-900 dark:text-white whitespace-pre-wrap">{note.content}</p>
-                    <div className="flex items-center gap-2 mt-3 text-xs text-slate-500 dark:text-slate-400">
-                      <span>{note.author}</span>
-                      <span>•</span>
-                      <span>{note.date instanceof Date && !isNaN(note.date.getTime()) ? note.date.toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Akkurat nå'}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {notes.length === 0 ? (
+                <div className="px-6 py-10 text-center text-sm text-slate-400">
+                  Ingen aktivitet logget ennå. Bruk Hurtiglogg i Oversikt-fanen for å registrere kundekontakt.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {notes.map((entry) => (
+                    <ActivityEntry key={entry.id} entry={entry} detailed />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
