@@ -639,9 +639,11 @@ export function TicketDetailMVP() {
                   // Priority: 1) ticket's linked contact (kontakt_id) → use their name + email
                   //           2) match customerContacts by email address
                   //           3) unknown → show raw email + "Legg til kontakt"
-                  const ticketContact = supaTicket?.kontakter ?? null;
+                  // fra is always an email — look up by address only.
+                  // ticketContact is the linked contact for the ticket overall,
+                  // but each message may come from a different person (e.g. CC participant).
                   const resolvedContact: any = message.type === 'customer'
-                    ? ticketContact || customerContacts.find(c => c.epost === message.from)
+                    ? customerContacts.find(c => c.epost === message.from)
                     : null;
 
                   return (
