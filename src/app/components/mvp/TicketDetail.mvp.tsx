@@ -134,6 +134,19 @@ export function TicketDetailMVP() {
       });
   }, [id]);
 
+  // Auto-populate CC from thread whenever conversation loads/changes
+  useEffect(() => {
+    const allCC = conversation
+      .filter(m => m.type === 'customer' && m.cc)
+      .flatMap((m: any) => m.cc.split(',').map((a: string) => a.trim()))
+      .filter(Boolean);
+    const unique = [...new Set(allCC)] as string[];
+    if (unique.length > 0) {
+      setReplyCC(prev => prev || unique.join(', ')); // only set if not already edited
+      setShowCC(true); // show CC field automatically when addresses exist
+    }
+  }, [conversation]);
+
   const [internalNotes, setInternalNotes] = useState<any[]>([]);
 
   // Build ticket from Supabase data
@@ -768,26 +781,12 @@ export function TicketDetailMVP() {
                           <Mail className="w-4 h-4 text-slate-400 shrink-0" />
                           <span className="text-slate-500 dark:text-slate-400 shrink-0">Til:</span>
                           <span className="text-slate-900 dark:text-white font-medium flex-1 truncate">{replyDisplay}</span>
-                          {(() => {
-                            const allCC = conversation
-                              .filter(m => m.type === 'customer' && m.cc)
-                              .flatMap((m: any) => m.cc.split(',').map((a: string) => a.trim()))
-                              .filter(Boolean);
-                            const uniqueCC = [...new Set(allCC)];
-                            return (
-                              <button
-                                onClick={() => {
-                                  if (!showCC && !replyCC && uniqueCC.length > 0) {
-                                    setReplyCC(uniqueCC.join(', '));
-                                  }
-                                  setShowCC(v => !v);
-                                }}
-                                className="text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0"
-                              >
-                                {showCC ? 'Skjul CC' : uniqueCC.length > 0 ? `+ CC (${uniqueCC.length})` : '+ CC'}
-                              </button>
-                            );
-                          })()}
+                          <button
+                            onClick={() => setShowCC(v => !v)}
+                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0"
+                          >
+                            {showCC ? 'Skjul CC' : replyCC ? `CC (${replyCC.split(',').filter(Boolean).length})` : '+ CC'}
+                          </button>
                         </div>
                         {showCC && (
                           <div className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-900 px-3 py-2 rounded border border-slate-200 dark:border-slate-700">
