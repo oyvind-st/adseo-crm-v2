@@ -134,16 +134,21 @@ export function TicketDetailMVP() {
       });
   }, [id]);
 
-  // Auto-populate CC from thread whenever conversation loads/changes
+  // Auto-populate CC from thread whenever conversation loads/changes.
+  // Exclude addresses that appear as the primary sender (fra) in any customer
+  // message — those go into "Til:", not CC.
   useEffect(() => {
+    const senderEmails = new Set(
+      conversation.filter(m => m.type === 'customer').map(m => m.from?.toLowerCase())
+    );
     const allCC = conversation
       .filter(m => m.type === 'customer' && m.cc)
-      .flatMap((m: any) => m.cc.split(',').map((a: string) => a.trim()))
-      .filter(Boolean);
+      .flatMap((m: any) => m.cc.split(',').map((a: string) => a.trim().toLowerCase()))
+      .filter(addr => addr && !senderEmails.has(addr));
     const unique = [...new Set(allCC)] as string[];
     if (unique.length > 0) {
-      setReplyCC(prev => prev || unique.join(', ')); // only set if not already edited
-      setShowCC(true); // show CC field automatically when addresses exist
+      setReplyCC(prev => prev || unique.join(', '));
+      setShowCC(true);
     }
   }, [conversation]);
 
