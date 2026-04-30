@@ -69,42 +69,17 @@ export function Settings() {
     if (!inviteEmail.trim()) return;
     setInviting(true);
 
-    if (!supabaseAdmin) {
-      alert('Mangler admin-tilgang. Sjekk VITE_SUPABASE_SERVICE_KEY i .env');
-      setInviting(false);
-      return;
-    }
+    // Call server-side Vercel function — service key never exposed in browser
+    const res = await fetch('/api/invite-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: inviteEmail, rolle: inviteRole, navn: inviteEmail.split('@')[0] })
+    });
+    const result = await res.json();
 
-    // Use admin client to invite — creates auth user and sends invite email
-    console.log('[invite] calling inviteUserByEmail for', inviteEmail);
-    const { data: inviteData, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      inviteEmail,
-      {
-        redirectTo: window.location.origin,
-        data: { rolle: inviteRole }
-      }
-    );
-    console.log('[invite] result:', { inviteData, error });
-
-    if (error) {
-      console.error('[invite] error:', error);
-      alert('Feil ved sending av invitasjon: ' + error.message + '\n\nStatus: ' + (error as any).status);
+    if (!res.ok || result.error) {
+      alert('Feil ved sending av invitasjon: ' + (result.error || 'Ukjent feil'));
     } else {
-      console.log('[invite] user id:', inviteData?.user?.id);
-      // Explicitly upsert the profile row using admin client
-      if (inviteData?.user?.id) {
-        const initials = inviteEmail.split('@')[0].substring(0, 2).toUpperCase();
-        const navn = inviteEmail.split('@')[0];
-        const { error: profileError } = await supabaseAdmin!.from('profiles').upsert({
-          id: inviteData.user.id,
-          epost: inviteEmail,
-          navn,
-          rolle: inviteRole,
-          status: 'active',
-          avatar_initials: initials
-        }, { onConflict: 'id' });
-        console.log('[invite] profile upsert error:', profileError);
-      }
       alert('Invitasjon sendt til ' + inviteEmail + '! De mottar en e-post med innloggingslenke.');
     }
 
