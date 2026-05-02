@@ -115,10 +115,10 @@ export function TaskListMVP() {
   const teamMemberNames = profiles.map(p => p.navn);
   const allSelected = selectedAssignees.length === teamMemberNames.length && teamMemberNames.length > 0;
 
-  // Filter by selected assignees
+  // Filter by selected assignees — tasks without an assignee always show
   const applyAssigneeFilter = (list: Task[]) => {
     if (selectedAssignees.length === 0) return list;
-    return list.filter(t => selectedAssignees.includes(t.assignee));
+    return list.filter(t => !t.assignee || selectedAssignees.includes(t.assignee));
   };
 
   const toggleAssignee = (name: string) => {
@@ -140,7 +140,8 @@ export function TaskListMVP() {
   // Tab categorisation based on real ISO dates
   const todayTasks    = tasks.filter(t => t.dueDateRaw === today && t.status !== 'Done');
   const overdueTasks  = tasks.filter(t => !!t.dueDateRaw && t.dueDateRaw < today && t.status !== 'Done');
-  const upcomingTasks = tasks.filter(t => !!t.dueDateRaw && t.dueDateRaw > today && t.status !== 'Done');
+  // Upcoming = future date OR no date at all (unscheduled tasks are still upcoming)
+  const upcomingTasks = tasks.filter(t => t.status !== 'Done' && t.dueDateRaw !== today && !(!!t.dueDateRaw && t.dueDateRaw < today));
   const completedTasks = tasks.filter(t => t.status === 'Done');
 
   const myTasks = tasks.filter(t => t.assigneeId === user?.id && t.status !== 'Done');
