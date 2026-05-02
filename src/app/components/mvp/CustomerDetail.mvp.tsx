@@ -44,7 +44,7 @@ import {
 import { TaskItem } from '../TaskItem';
 import { DateTimePicker } from '../DateTimePicker';
 import { supabase } from '../../../lib/supabase';
-import { Button, Avatar, Badge, PriorityBadge, StatusBadge, Loading, Card } from '../shared';
+import { Button, Avatar, Badge, PriorityBadge, StatusBadge, Loading, Card, LeveranseRow } from '../shared';
 import { useProfiles } from '../../../lib/useProfiles';
 import { useCurrentUser } from '../../contexts/UserContext';
 
@@ -325,18 +325,31 @@ export function CustomerDetailMVP() {
   };
 
   // Deliveries data
-  const deliveries = [
-    {
-      id: '1',
-      customer: customer.name,
-      service: 'Hjemmeside',
-      assignee: 'Ola Nordmann',
-      deadline: '30. mai 2026',
-      progress: { completed: 4, total: 11 },
-      status: 'Pågår',
-      hasNewTickets: true
-    }
-  ];
+  // Deliveries from Supabase (loaded with the customer query)
+  const deliveries = (supaCustomer?.leveranser || [])
+    .filter((l: any) => l.status !== 'ferdig')
+    .map((l: any) => {
+      const tasks = l.leveranse_oppgaver || [];
+      const done  = tasks.filter((t: any) => t.fullfort).length;
+      const total = tasks.length;
+      const toStatus = (s: string) => {
+        if (s === 'ikke_startet')    return 'not_started' as const;
+        if (s === 'pagar')           return 'in_progress' as const;
+        if (s === 'venter_pa_kunde') return 'waiting' as const;
+        return 'in_progress' as const;
+      };
+      return {
+        id:              l.id,
+        customer:        supaCustomer?.bedriftsnavn || '—',
+        type:            l.type || '',
+        status:          toStatus(l.status),
+        progress:        total ? Math.round((done / total) * 100) : 0,
+        tasksCompleted:  done,
+        tasksTotal:      total,
+        deadline:        l.frist ? new Date(l.frist).toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric' }) : '',
+        hasUnreadTickets: l.frist && new Date(l.frist) < new Date(),
+      };
+    });
 
   // Tasks - these match the tasks in TaskList and LeveranseDetail
   const [customerTasks, setCustomerTasks] = useState([
@@ -847,60 +860,9 @@ export function CustomerDetailMVP() {
               {deliveries.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="font-semibold text-slate-900 dark:text-white">Aktive leveranser</h3>
-                  {deliveries.map((delivery) => {
-                    const progressPercentage = Math.round((delivery.progress.completed / delivery.progress.total) * 100);
-
-                    return (
-                      <div
-                        key={delivery.id}
-                        onClick={() => navigate(`/leveranser/${delivery.id}`)}
-                        className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-5 hover:border-blue-300 dark:hover:border-blue-700 transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-semibold text-slate-900 dark:text-white">{delivery.customer}</h4>
-                              {delivery.hasNewTickets && (
-                                <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-xs rounded-full font-medium border border-red-200 dark:border-red-800">
-                                  Nye tickets
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-slate-600 dark:text-slate-400">{delivery.service}</p>
-                          </div>
-                          <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-sm rounded-full font-medium">
-                            {delivery.status}
-                          </span>
-                        </div>
-
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-4 text-slate-600 dark:text-slate-400">
-                              <span className="flex items-center gap-1.5">
-                                <Users className="w-4 h-4" />
-                                {delivery.assignee}
-                              </span>
-                              <span className="flex items-center gap-1.5">
-                                <Calendar className="w-4 h-4" />
-                                Frist: {delivery.deadline}
-                              </span>
-                            </div>
-                            <span className="font-medium text-slate-900 dark:text-white">
-                              {delivery.progress.completed} av {delivery.progress.total} oppgaver
-                            </span>
-                          </div>
-
-                          {/* Progress Bar */}
-                          <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2.5">
-                            <div
-                              className="bg-blue-600 dark:bg-blue-500 h-2.5 rounded-full transition-all duration-300"
-                              style={{ width: `${progressPercentage}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {deliveries.map((delivery) => (
+                    <LeveranseRow key={delivery.id} {...delivery} />
+                  ))}
                 </div>
               )}
 

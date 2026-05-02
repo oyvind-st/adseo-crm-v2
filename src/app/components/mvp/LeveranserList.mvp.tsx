@@ -154,16 +154,18 @@ export function LeveranserListMVP() {
         </div>
       </div>
 
-      {/* Leveranser List */}
-      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-        <div className="divide-y divide-slate-100 dark:divide-slate-700">
-          {filteredLeveranser.length === 0 ? (
-            <div className="p-10 text-center text-sm text-slate-400">Ingen leveranser</div>
-          ) : filteredLeveranser.map((leveranse) => (
+      {/* Leveranser — card grid */}
+      {filteredLeveranser.length === 0 ? (
+        <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-10 text-center text-sm text-slate-400">
+          Ingen leveranser
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredLeveranser.map((leveranse) => (
             <LeveranseRow key={leveranse.id} {...leveranse} />
           ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }
