@@ -351,159 +351,39 @@ export function CustomerDetailMVP() {
       };
     });
 
-  // Tasks - these match the tasks in TaskList and LeveranseDetail
-  const [customerTasks, setCustomerTasks] = useState([
-    // Fase 1 - Oppstart
-    {
-      id: 'task_1_1',
-      title: 'Motta info fra kunde',
-      description: 'Samle inn all nødvendig informasjon om prosjektet',
-      dueDate: 'Fullført',
-      priority: 'high' as const,
-      status: 'Done',
-      assignee: 'Ola Nordmann',
-      customer: customer.name,
-      customerId: id,
-      service: 'Hjemmeside',
-      taskType: 'delivery' as const
-    },
-    {
-      id: 'task_1_2',
-      title: 'Motta logoer og bilder',
-      description: 'Få tilsendt alle visuelle ressurser',
-      dueDate: 'Fullført',
-      priority: 'high' as const,
-      status: 'Done',
-      assignee: 'Ola Nordmann',
-      customer: customer.name,
-      customerId: id,
-      service: 'Hjemmeside',
-      taskType: 'delivery' as const
-    },
-    {
-      id: '3',
-      title: 'Onboarding oppfølging',
-      description: 'Sjekk at alle tilganger er på plass',
-      dueDate: 'Om 3 dager',
-      priority: 'medium' as const,
-      status: 'Not started',
-      assignee: 'Ola Nordmann',
-      customer: customer.name,
-      customerId: id,
-      service: 'Hjemmeside',
-      taskType: 'regular' as const
-    },
-    // Fase 2 - Teknisk oppsett
-    {
-      id: 'task_2_1',
-      title: 'Registrer domene',
-      description: 'Registrere eller overføre domene',
-      dueDate: 'Fullført',
-      priority: 'high' as const,
-      status: 'Done',
-      assignee: 'Ola Nordmann',
-      customer: customer.name,
-      customerId: id,
-      service: 'Hjemmeside',
-      taskType: 'delivery' as const
-    },
-    {
-      id: 'task_2_2',
-      title: 'Sett opp hosting',
-      description: 'Konfigurere server og hosting-miljø',
-      dueDate: 'Fullført',
-      priority: 'high' as const,
-      status: 'Done',
-      assignee: 'Ola Nordmann',
-      customer: customer.name,
-      customerId: id,
-      service: 'Hjemmeside',
-      taskType: 'delivery' as const
-    },
-    {
-      id: '2',
-      title: 'Sett opp Google Analytics tracking',
-      description: 'Verifiser at tracking er korrekt',
-      dueDate: 'I morgen',
-      priority: 'high' as const,
-      status: 'Not started',
-      assignee: 'Kari Jensen',
-      customer: customer.name,
-      customerId: id,
-      service: 'Hjemmeside',
-      taskType: 'regular' as const
-    },
-    // Fase 3 - Design og innhold
-    {
-      id: 'task_3_1',
-      title: 'Lag design',
-      description: 'Designe sidene i Figma basert på kundens ønsker',
-      dueDate: 'I dag',
-      priority: 'high' as const,
-      status: 'In progress',
-      assignee: 'Kari Jensen',
-      customer: customer.name,
-      customerId: id,
-      service: 'Hjemmeside',
-      taskType: 'delivery' as const
-    },
-    {
-      id: 'task_3_2',
-      title: 'Få godkjenning på design',
-      description: 'Presentere og få godkjenning fra kunde',
-      dueDate: 'Om 2 dager',
-      priority: 'high' as const,
-      status: 'Not started',
-      assignee: 'Kari Jensen',
-      customer: customer.name,
-      customerId: id,
-      service: 'Hjemmeside',
-      taskType: 'delivery' as const
-    },
-    {
-      id: '1',
-      title: 'Send månedsrapport',
-      description: 'Første månedsrapport SEO',
-      dueDate: 'I dag 15:00',
-      priority: 'high' as const,
-      status: 'In progress',
-      assignee: 'Ola Nordmann',
-      customer: customer.name,
-      customerId: id,
-      service: 'Hjemmeside',
-      taskType: 'regular' as const
-    },
-    // Fase 4 - Utvikling
-    {
-      id: 'task_4_1',
-      title: 'Utvikle frontend',
-      description: 'Kode HTML/CSS/JS basert på godkjent design',
-      dueDate: 'Om 9 dager',
-      priority: 'high' as const,
-      status: 'Not started',
-      assignee: 'Ola Nordmann',
-      customer: customer.name,
-      customerId: id,
-      service: 'Hjemmeside',
-      taskType: 'delivery' as const
-    },
-    {
-      id: 'task_4_2',
-      title: 'Sett opp CMS',
-      description: 'Installere og konfigurere WordPress',
-      dueDate: 'Om 11 dager',
-      priority: 'medium' as const,
-      status: 'Not started',
-      assignee: 'Ola Nordmann',
-      customer: customer.name,
-      customerId: id,
-      service: 'Hjemmeside',
-      taskType: 'delivery' as const
-    }
-  ]);
+  // Tasks from Supabase — filtered by this customer's id
+  const [customerTasks, setCustomerTasks] = useState<any[]>([]);
 
-  // Filter for regular tasks only (non-delivery tasks)
-  const regularTasks = customerTasks.filter(t => t.taskType === 'regular');
+  useEffect(() => {
+    if (!id) return;
+    supabase
+      .from('oppgaver')
+      .select('*, ansvarlig:ansvarlig_id(navn)')
+      .eq('kunde_id', id)
+      .neq('status', 'fullfort')
+      .order('frist', { ascending: true, nullsFirst: false })
+      .then(({ data }) => {
+        if (data) {
+          setCustomerTasks(data.map(t => ({
+            id: t.id,
+            title: t.tittel,
+            description: t.beskrivelse ?? '',
+            customer: customer.name,
+            customerId: id,
+            assignee: t.ansvarlig?.navn ?? '',
+            dueDate: t.frist
+              ? new Date(t.frist).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })
+              : '—',
+            priority: t.prioritet === 'høy' ? 'high' : t.prioritet === 'lav' ? 'low' : 'medium',
+            status: t.status === 'pagar' ? 'In progress' : t.status === 'fullfort' ? 'Done' : 'Not started',
+            overdue: t.frist && new Date(t.frist) < new Date() && t.status !== 'fullfort',
+            taskType: 'regular' as const,
+          })));
+        }
+      });
+  }, [id]);
+
+  const regularTasks = customerTasks;
 
   const [notes, setNotes] = useState<any[]>([]);
 
