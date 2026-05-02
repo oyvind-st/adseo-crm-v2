@@ -52,7 +52,7 @@ function AppRoutes() {
           <Route index element={<Dashboard />} />
           <Route path="customers" element={<CustomerListMVP />} />
           <Route path="customers/:id" element={<CustomerDetailMVP />} />
-          <Route path="tasks" element={<TaskList />} />
+          <Route path="tasks" element={<TaskListMVP />} />
           <Route path="tickets" element={<TicketListMVP />} />
           <Route path="tickets/:id" element={<TicketDetailMVP />} />
           <Route path="leveranser" element={<LeveranserListMVP />} />
