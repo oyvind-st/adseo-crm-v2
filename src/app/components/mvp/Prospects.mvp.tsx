@@ -227,7 +227,10 @@ const KONTAKT_PRIORITET: Record<string, number> = {
   POHV: 10,  // Prokura alene — typically C-suite (CFO/COO/legal)
   POFL: 20,  // Prokura i fellesskap — less actionable but still relevant
   // Tier 2 — only if no Tier 1 found
-  LEDE: 50,  // Styreleder — fallback for small AS without DAGL
+  LEDE: 50,  // Styreleder — fallback for små AS uten DAGL
+  NEST: 51,  // Styrets nestleder — etter LEDE
+  // Tier 3 — only if no Tier 1 OR Tier 2 found
+  MEDL: 60,  // Styremedlem — siste fallback for små selskap
 }
 
 // Normalize the two date formats Brreg returns: /roller gives ISO "YYYY-MM-DD",
@@ -382,9 +385,15 @@ async function fetchKontaktpersoner(orgnr: string): Promise<KontakterResult> {
     }
 
     const all = Array.from(byKey.values())
-    // Tier-2 (LEDE) is fallback only when no Tier-1 contact exists.
+    // Tier-2 (LEDE/NEST) er fallback når ingen Tier-1 finnes.
+    // Tier-3 (MEDL) er fallback når verken Tier-1 eller Tier-2 finnes.
     const hasTier1 = all.some(k => k.prioritet < 50)
-    const filtered = hasTier1 ? all.filter(k => k.prioritet < 50) : all
+    const hasTier2 = all.some(k => k.prioritet >= 50 && k.prioritet < 60)
+    const filtered = hasTier1
+      ? all.filter(k => k.prioritet < 50)
+      : hasTier2
+        ? all.filter(k => k.prioritet < 60)
+        : all
     const kontakter = filtered.sort((a, b) => {
       // Boost people with signaturrett alene to the top of equal-priority groups
       if (a.prioritet === b.prioritet) {
@@ -2155,7 +2164,10 @@ function ProspektSok() {
                     }}
                     inRingeliste={ringeliste.has(company.orgnr)}
                     isKunde={kunder.has(company.orgnr)}
-                    onAdd={() => addToRingeliste(company)}
+                    onAdd={async () => {
+                      const res = await fetchKontaktpersoner(company.orgnr).catch(() => ({ kontakter: [] as Kontaktperson[] }))
+                      addToRingeliste(company, res.kontakter.slice(0, 5))
+                    }}
                     adding={adding.has(company.orgnr)}
                     onRowClick={() => setSelectedOrgnr(company.orgnr)}
                   />
@@ -2962,7 +2974,10 @@ function NyregistrerteTab() {
                         </span>
                       ) : (
                         <button
-                          onClick={() => addToRingeliste(row)}
+                          onClick={async () => {
+                            const res = await fetchKontaktpersoner(row.orgnr).catch(() => ({ kontakter: [] as Kontaktperson[] }))
+                            addToRingeliste(row, res.kontakter.slice(0, 5))
+                          }}
                           disabled={adding.has(row.orgnr)}
                           className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors"
                         >

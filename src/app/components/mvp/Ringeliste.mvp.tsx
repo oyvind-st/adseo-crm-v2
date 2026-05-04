@@ -157,7 +157,11 @@ function formatRelative(iso?: string | null): string | null {
 // ─────────────────────────────────────────────
 const KONTAKT_PRIORITET: Record<string, number> = {
   DAGL: 1, INNH: 2, KOMP: 3, DTPR: 4, BSTV: 5, KONT: 6, FFGM: 7,
-  POHV: 10, POFL: 20, LEDE: 50,
+  POHV: 10, POFL: 20,
+  // Tier 2 — fallback når ingen Tier-1 finnes
+  LEDE: 50, NEST: 51,
+  // Tier 3 — siste fallback for små selskap
+  MEDL: 60,
 }
 
 interface BrregFullmaktData {
@@ -287,9 +291,13 @@ async function fetchBrregKontakter(orgnr: string): Promise<BrregKontakt[]> {
       })
     }
     const all = Array.from(byKey.values())
-    // Tier-2 (LEDE) bare som fallback hvis ingen Tier-1 finnes
     const hasTier1 = all.some(k => k.prioritet < 50)
-    const filtered = hasTier1 ? all.filter(k => k.prioritet < 50) : all
+    const hasTier2 = all.some(k => k.prioritet >= 50 && k.prioritet < 60)
+    const filtered = hasTier1
+      ? all.filter(k => k.prioritet < 50)
+      : hasTier2
+        ? all.filter(k => k.prioritet < 60)
+        : all
     return filtered.sort((a, b) => {
       if (a.prioritet === b.prioritet) {
         if (a.signaturAlene !== b.signaturAlene) return a.signaturAlene ? -1 : 1
@@ -931,9 +939,14 @@ function CallPanel({
     setOppgaveDato('')
   }, [row.id])
 
-  // Hent live kontakter fra Brreg (med riktig prioritet) og merge med
-  // eksisterende kontaktpersoner — bevarer brukerens telefon/epost-edits.
+  // SAFETY NET: Hent live kontakter fra Brreg KUN hvis raden mangler kontakter
+  // (legacy-rader fra før kontakter ble lagret i prospekteringen).
+  // Nye rader har allerede kontaktpersoner fylt inn fra prospektering.
   useEffect(() => {
+    if (initialContacts.length > 0) {
+      setHentingKontakter(false)
+      return
+    }
     let cancelled = false
     setHentingKontakter(true)
     fetchBrregKontakter(row.orgnr).then(brregKontakter => {
