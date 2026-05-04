@@ -2058,7 +2058,10 @@ function NyregistrerteTab() {
   const [syncInfo, setSyncInfo] = useState<{ sist_kjort?: string; antall_hentet?: number } | null>(null)
   const [period, setPeriod] = useState<7 | 30 | 90 | null>(30)
   const [bransjer, setBransjer] = useState<string[]>([])
+  const [orgFormer, setOrgFormer] = useState<string[]>([])
   const [kommuner, setKommuner] = useState<string[]>([])
+  const [fraAnsatte, setFraAnsatte] = useState('')
+  const [tilAnsatte, setTilAnsatte] = useState('')
   // Contact-info filters — applied at the Supabase query level.
   const [harHjemmeside, setHarHjemmeside] = useState(false)
   const [harTelefon, setHarTelefon] = useState(false)
@@ -2105,11 +2108,14 @@ function NyregistrerteTab() {
       const from = new Date(Date.now() - period * 86400000).toISOString().slice(0, 10)
       query = query.gte('registrert_dato', from)
     }
-    if (bransjer.length) query = query.in('bransje_kode', bransjer)
-    if (kommuner.length) query = query.in('kommunenummer', kommuner)
-    if (harHjemmeside)   query = query.not('hjemmeside', 'is', null)
-    if (harTelefon)      query = query.or('telefon.not.is.null,mobil.not.is.null')
-    if (harEpost)        query = query.not('epost', 'is', null)
+    if (bransjer.length)         query = query.in('bransje_kode', bransjer)
+    if (orgFormer.length)        query = query.in('org_form', orgFormer)
+    if (kommuner.length)         query = query.in('kommunenummer', kommuner)
+    if (fraAnsatte !== '')       query = query.gte('ansatte', Number(fraAnsatte))
+    if (tilAnsatte !== '')       query = query.lte('ansatte', Number(tilAnsatte))
+    if (harHjemmeside)           query = query.not('hjemmeside', 'is', null)
+    if (harTelefon)              query = query.or('telefon.not.is.null,mobil.not.is.null')
+    if (harEpost)                query = query.not('epost', 'is', null)
 
     const fromIdx = page * pageSize
     const toIdx   = fromIdx + pageSize - 1
@@ -2117,10 +2123,10 @@ function NyregistrerteTab() {
     setRows(data || [])
     setTotalCount(count || 0)
     setLoading(false)
-  }, [period, bransjer, kommuner, harHjemmeside, harTelefon, harEpost, sortField, sortAsc, page, pageSize])
+  }, [period, bransjer, orgFormer, kommuner, fraAnsatte, tilAnsatte, harHjemmeside, harTelefon, harEpost, sortField, sortAsc, page, pageSize])
 
   // Reset to page 0 when any non-page filter changes
-  useEffect(() => { setPage(0) }, [period, bransjer, kommuner, harHjemmeside, harTelefon, harEpost, sortField, sortAsc, pageSize])
+  useEffect(() => { setPage(0) }, [period, bransjer, orgFormer, kommuner, fraAnsatte, tilAnsatte, harHjemmeside, harTelefon, harEpost, sortField, sortAsc, pageSize])
   useEffect(() => { loadNyregistrerte() }, [loadNyregistrerte])
 
   // Recompute bransje + kommune counts whenever filters change. Each query
@@ -2131,12 +2137,15 @@ function NyregistrerteTab() {
       ? new Date(Date.now() - period * 86400000).toISOString().slice(0, 10)
       : null
 
-    const applyShared = <T extends { gte: any; in: any; not: any; or: any }>(q: T): T => {
+    const applyShared = <T extends { gte: any; lte: any; in: any; not: any; or: any }>(q: T): T => {
       let r: any = q
       if (fromDate) r = r.gte('registrert_dato', fromDate)
-      if (harHjemmeside) r = r.not('hjemmeside', 'is', null)
-      if (harTelefon)    r = r.or('telefon.not.is.null,mobil.not.is.null')
-      if (harEpost)      r = r.not('epost', 'is', null)
+      if (orgFormer.length)  r = r.in('org_form', orgFormer)
+      if (fraAnsatte !== '') r = r.gte('ansatte', Number(fraAnsatte))
+      if (tilAnsatte !== '') r = r.lte('ansatte', Number(tilAnsatte))
+      if (harHjemmeside)     r = r.not('hjemmeside', 'is', null)
+      if (harTelefon)        r = r.or('telefon.not.is.null,mobil.not.is.null')
+      if (harEpost)          r = r.not('epost', 'is', null)
       return r
     }
 
@@ -2177,7 +2186,7 @@ function NyregistrerteTab() {
       }
       setKommuneCounts(counts)
     })
-  }, [period, bransjer, kommuner, harHjemmeside, harTelefon, harEpost])
+  }, [period, bransjer, orgFormer, kommuner, fraAnsatte, tilAnsatte, harHjemmeside, harTelefon, harEpost])
 
   const handleSync = async () => {
     setSyncing(true)
@@ -2305,7 +2314,10 @@ function NyregistrerteTab() {
   const resetFilters = () => {
     setPeriod(30)
     setBransjer([])
+    setOrgFormer([])
     setKommuner([])
+    setFraAnsatte('')
+    setTilAnsatte('')
     setHarHjemmeside(false)
     setHarTelefon(false)
     setHarEpost(false)
@@ -2364,6 +2376,55 @@ function NyregistrerteTab() {
             Kommune
           </label>
           <KommuneCombobox selected={kommuner} onChange={setKommuner} counts={kommuneCounts} />
+        </div>
+
+        {/* Organisasjonsform */}
+        <div>
+          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
+            Organisasjonsform
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {ORG_FORMER.map(of => (
+              <button
+                key={of.kode}
+                type="button"
+                onClick={() => setOrgFormer(prev =>
+                  prev.includes(of.kode) ? prev.filter(k => k !== of.kode) : [...prev, of.kode]
+                )}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                  orgFormer.includes(of.kode)
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-blue-400'
+                }`}
+              >
+                {of.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Ansatte */}
+        <div>
+          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
+            Ansatte
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              placeholder="Fra"
+              value={fraAnsatte}
+              onChange={e => setFraAnsatte(e.target.value)}
+              className="w-full px-2.5 py-1.5 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="text-slate-400 text-xs">–</span>
+            <input
+              type="number"
+              placeholder="Til"
+              value={tilAnsatte}
+              onChange={e => setTilAnsatte(e.target.value)}
+              className="w-full px-2.5 py-1.5 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
 
         {/* Kontaktinfo tilgjengelig */}
