@@ -234,8 +234,11 @@ function personKey(navn: string, fodselsdato?: string): string {
 async function fetchFullmakt(orgnr: string, type: 'signatur' | 'prokura'): Promise<FullmaktData> {
   const empty: FullmaktData = { alenePersoner: new Set(), fellesPersoner: new Set(), personer: [] }
   try {
+    // Brreg's /fullmakt endpoint serves no Access-Control-Allow-Origin header,
+    // so we route through our own /api/brreg-fullmakt proxy (a Vercel serverless
+    // function that forwards the request server-side and adds the CORS headers).
     const resp = await fetch(
-      `https://data.brreg.no/fullmakt/enheter/${orgnr}/${type}`,
+      `/api/brreg-fullmakt?orgnr=${encodeURIComponent(orgnr)}&type=${type}`,
       { headers: { Accept: 'application/json' } }
     )
     if (!resp.ok) return empty
