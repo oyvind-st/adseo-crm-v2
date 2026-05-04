@@ -232,7 +232,7 @@ function personKey(navn: string, fodselsdato?: string): string {
 }
 
 async function fetchFullmakt(orgnr: string, type: 'signatur' | 'prokura'): Promise<FullmaktData> {
-  const empty: FullmaktData = { alenePersoner: new Set(), fellesPersoner: new Set() }
+  const empty: FullmaktData = { alenePersoner: new Set(), fellesPersoner: new Set(), personer: [] }
   try {
     const resp = await fetch(
       `https://data.brreg.no/fullmakt/enheter/${orgnr}/${type}`,
@@ -345,7 +345,7 @@ async function fetchKontaktpersoner(orgnr: string): Promise<KontakterResult> {
 
     // Second pass: add prokurister from /prokura who weren't in /roller. These
     // are typically executives (CFO/COO/legal) and very relevant for B2B sales.
-    for (const p of prokura.personer) {
+    for (const p of (prokura.personer || [])) {
       if (byKey.has(p.key)) continue  // already covered via /roller
       const prio = p.alene ? KONTAKT_PRIORITET.POHV : KONTAKT_PRIORITET.POFL
       const fodselsaar = p.fodselsdato ? parseInt(p.fodselsdato.slice(0, 4)) : undefined
