@@ -1649,13 +1649,23 @@ function ProspektSok() {
         kilde: 'brreg',
         stage: 'ny_lead',
         tildelt_bruker_id: eier,
+        telefon: company.telefon || company.mobil || null,
+        epost: company.epost || null,
+        hjemmeside: company.hjemmeside || null,
       }
       if (top) {
         insert.kontaktperson_navn = top.navn
         insert.kontaktperson_rolle = top.rolle
       }
       if (kontakter && kontakter.length > 0) {
-        insert.kontaktpersoner = kontakter
+        // Pre-fyll telefon/epost på top-kontakten med firma-info så det vises
+        // i ringe-cockpiten uten ekstra arbeid for brukeren
+        const enriched = kontakter.map((k, i) => i === 0 ? {
+          ...k,
+          telefon: (k as any).telefon || company.telefon || company.mobil || null,
+          epost: (k as any).epost || company.epost || null,
+        } : k)
+        insert.kontaktpersoner = enriched
       }
 
       // Defensive insert: hvis Supabase klager på en kolonne som mangler, dropp den og prøv igjen.
@@ -2530,13 +2540,21 @@ function NyregistrerteTab() {
         kilde: 'brreg',
         stage: 'ny_lead',
         tildelt_bruker_id: eier,
+        telefon: row.telefon || row.mobil || null,
+        epost: row.epost || null,
+        hjemmeside: row.hjemmeside || null,
       }
       if (top) {
         insert.kontaktperson_navn = top.navn
         insert.kontaktperson_rolle = top.rolle
       }
       if (kontakter && kontakter.length > 0) {
-        insert.kontaktpersoner = kontakter
+        const enriched = kontakter.map((k, i) => i === 0 ? {
+          ...k,
+          telefon: (k as any).telefon || row.telefon || row.mobil || null,
+          epost: (k as any).epost || row.epost || null,
+        } : k)
+        insert.kontaktpersoner = enriched
       }
       // Defensive insert: hvis Supabase klager på en kolonne som mangler, dropp den og prøv igjen.
       // Repeterer opptil 5 ganger for å rydde flere manglende kolonner i serie.
@@ -3054,6 +3072,10 @@ function NyregistrerteTab() {
               ansatte: company.ansatte,
               registrert_dato: company.registrertDato,
               mva_registrert: company.mvaRegistrert,
+              telefon: company.telefon,
+              mobil: company.mobil,
+              epost: company.epost,
+              hjemmeside: company.hjemmeside,
             }
             addToRingeliste(row, kontakter, tildeltBrukerId)
             setSelectedOrgnr(null)
