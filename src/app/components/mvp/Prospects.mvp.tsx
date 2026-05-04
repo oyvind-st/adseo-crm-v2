@@ -302,28 +302,24 @@ function BransjeCombobox({
 // ─────────────────────────────────────────────
 // Sub-component: KommuneCombobox
 // ─────────────────────────────────────────────
-const KOMMUNER = [
-  { nr: '0301', navn: 'Oslo' },
-  { nr: '4601', navn: 'Bergen' },
-  { nr: '5001', navn: 'Trondheim' },
-  { nr: '1103', navn: 'Stavanger' },
-  { nr: '3005', navn: 'Drammen' },
-  { nr: '3807', navn: 'Skien' },
-  { nr: '1506', navn: 'Molde' },
-  { nr: '1804', navn: 'Bodø' },
-  { nr: '1902', navn: 'Tromsø' },
-  { nr: '3401', navn: 'Hamar' },
-  { nr: '3105', navn: 'Sarpsborg' },
-  { nr: '3107', navn: 'Fredrikstad' },
-  { nr: '3001', navn: 'Halden' },
-  { nr: '3101', navn: 'Østfold' },
-  { nr: '3201', navn: 'Kongsvinger' },
-  { nr: '3411', navn: 'Gjøvik' },
-  { nr: '3413', navn: 'Lillehammer' },
-  { nr: '3415', navn: 'Øyer' },
-  { nr: '3701', navn: 'Notodden' },
-  { nr: '4001', navn: 'Kristiansand' },
-]
+// Kommuner loaded dynamically from Brreg
+let _kommunerCache: { nr: string; navn: string }[] | null = null
+
+async function loadKommuner() {
+  if (_kommunerCache) return _kommunerCache
+  try {
+    const resp = await fetch('https://data.brreg.no/enhetsregisteret/api/kommuner', {
+      headers: { Accept: 'application/json' }
+    })
+    const data = await resp.json()
+    _kommunerCache = (data._embedded?.kommuner || [])
+      .map((k: any) => ({ nr: k.nummer, navn: k.navn }))
+      .sort((a: any, b: any) => a.navn.localeCompare(b.navn, 'nb'))
+    return _kommunerCache
+  } catch {
+    return []
+  }
+}
 
 function KommuneCombobox({
   selected,
@@ -334,7 +330,12 @@ function KommuneCombobox({
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [kommuner, setKommuner] = useState<{ nr: string; navn: string }[]>([])
   const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    loadKommuner().then(setKommuner)
+  }, [])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -344,7 +345,7 @@ function KommuneCombobox({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const filtered = KOMMUNER.filter(k =>
+  const filtered = kommuner.filter(k =>
     k.navn.toLowerCase().includes(query.toLowerCase()) || k.nr.includes(query)
   )
 
@@ -352,7 +353,7 @@ function KommuneCombobox({
     onChange(selected.includes(nr) ? selected.filter(k => k !== nr) : [...selected, nr])
   }
 
-  const selectedNames = selected.map(nr => KOMMUNER.find(k => k.nr === nr)?.navn || nr)
+  const selectedNames = selected.map(nr => kommuner.find(k => k.nr === nr)?.navn || nr)
 
   return (
     <div className="relative" ref={ref}>
@@ -1210,6 +1211,7 @@ function NyregistrerteTab() {
   const [ringeliste, setRingeliste] = useState<Set<string>>(new Set())
   const [kunder, setKunder] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState<Set<string>>(new Set())
+  const [selectedOrgnr, setSelectedOrgnr] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.from('ringeliste').select('orgnr').then(({ data }) => {
@@ -1440,11 +1442,12 @@ function NyregistrerteTab() {
                 return (
                   <tr
                     key={row.orgnr}
-                    className={`hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors ${
+                    onClick={() => setSelectedOrgnr(row.orgnr)}
+                    className={`hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors cursor-pointer ${
                       checked ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-l-blue-500' : ''
                     }`}
                   >
-                    <td className="pl-4 pr-2 py-3">
+                    <td className="pl-4 pr-2 py-3" onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={checked}
@@ -1480,7 +1483,7 @@ function NyregistrerteTab() {
                     <td className="px-3 py-3 text-xs text-slate-500 dark:text-slate-500">
                       {row.registrert_dato || '—'}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                       {isK ? (
                         <span className="text-xs text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-lg">
                           Allerede kunde
@@ -1507,6 +1510,17 @@ function NyregistrerteTab() {
           </table>
         )}
       </div>
+
+      {/* Detail panel */}
+      {selectedOrgnr && (
+        <CompanyDetailPanel
+          orgnr={selectedOrgnr}
+          onClose={() => setSelectedOrgnr(null)}
+          onAdd={(company) => { addToRingeliste(company); setSelectedOrgnr(null) }}
+          inRingeliste={ringeliste.has(selectedOrgnr)}
+          isKunde={kunder.has(selectedOrgnr)}
+        />
+      )}
     </div>
   )
 }
