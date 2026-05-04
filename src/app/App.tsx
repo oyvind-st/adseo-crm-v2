@@ -21,6 +21,7 @@ import { TicketDetailMVP } from './components/mvp/TicketDetail.mvp'
 import { LeveranserListMVP } from './components/mvp/LeveranserList.mvp'
 import { LeadListMVP } from './components/mvp/LeadList.mvp'
 import { DesignSystemMVP } from './components/mvp/DesignSystem.mvp'
+import { ProspectsMVP } from './components/mvp/Prospects.mvp'
 
 // Stamps activity on every page navigation (must be inside BrowserRouter)
 function ActivityTracker() {
@@ -57,6 +58,7 @@ function AppRoutes() {
           <Route path="tickets/:id" element={<TicketDetailMVP />} />
           <Route path="leveranser" element={<LeveranserListMVP />} />
           <Route path="leads" element={<LeadListMVP />} />
+          <Route path="prospects" element={<ProspectsMVP />} />
           <Route path="settings" element={<Settings />} />
           <Route path="design-system" element={<DesignSystemMVP />} />
           <Route path="*" element={<Dashboard />} />
