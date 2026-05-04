@@ -7,6 +7,7 @@ import {
   ArrowRight, FileText
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
+import { useCurrentUser } from '../../contexts/UserContext'
 
 // ─────────────────────────────────────────────
 // Types
@@ -865,11 +866,12 @@ function KommuneCombobox({
 // Sub-component: CompanyDetailPanel
 // ─────────────────────────────────────────────
 function CompanyDetailPanel({
-  orgnr, onClose, onAdd, inRingeliste, isKunde
+  orgnr, onClose, onAdd, onCreateKunde, inRingeliste, isKunde
 }: {
   orgnr: string
   onClose: () => void
   onAdd: (c: Company, kontakter: Kontaktperson[]) => void
+  onCreateKunde?: (c: Company, kontakter: Kontaktperson[]) => void
   inRingeliste: boolean
   isKunde: boolean
 }) {
@@ -1132,16 +1134,25 @@ function CompanyDetailPanel({
               <CheckCircle className="w-4 h-4" /> Lagt til i ringelisten
             </div>
           ) : company ? (
-            <button
-              onClick={() => onAdd(company, foreslatteKontakter)}
-              className="w-full px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Legg til ringeliste
-              {foreslatteKontakter.length > 0 && (
-                <span className="text-xs opacity-90">— {foreslatteKontakter[0].navn.split(' ')[0]}</span>
-              )}
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => onAdd(company, foreslatteKontakter)}
+                className="w-full px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Legg til ringeliste
+                {foreslatteKontakter.length > 0 && (
+                  <span className="text-xs opacity-90">— {foreslatteKontakter[0].navn.split(' ')[0]}</span>
+                )}
+              </button>
+              <button
+                onClick={() => onCreateKunde && onCreateKunde(company, foreslatteKontakter)}
+                className="w-full px-4 py-2.5 border border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors"
+              >
+                <ArrowRight className="w-4 h-4" />
+                Opprett kundekort
+              </button>
+            </div>
           ) : null}
         </div>
       </div>
@@ -1274,6 +1285,10 @@ function ProspektSok() {
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(0)
 
+  // Hide companies that are already in our ringeliste OR already a non-archived
+  // kundekort. Default ON.
+  const [skjulProspekterte, setSkjulProspekterte] = useState(true)
+
   // Result accumulator (across multiple Brreg pages).
   //
   // Brreg's search API doesn't support filtering on contact info (hjemmeside,
@@ -1312,8 +1327,11 @@ function ProspektSok() {
     supabase.from('ringeliste').select('orgnr').then(({ data }) => {
       if (data) setRingeliste(new Set(data.map((r: any) => r.orgnr)))
     })
-    supabase.from('kunder').select('org_nummer').then(({ data }) => {
-      if (data) setKunder(new Set(data.map((k: any) => k.org_nummer).filter(Boolean)))
+    supabase.from('kunder').select('org_nummer, kunde_status').then(({ data }) => {
+      if (data) {
+        const aktive = data.filter((k: any) => k.kunde_status !== 'arkivert')
+        setKunder(new Set(aktive.map((k: any) => k.org_nummer).filter(Boolean)))
+      }
     })
   }, [])
 
@@ -1415,14 +1433,20 @@ function ProspektSok() {
 
   const exhausted = hasSearched && brregNextPage >= brregTotalPages
 
-  // What we display: the slice of filtered items for the current logical page
-  const displayItems = filteredItems.slice(page * pageSize, (page + 1) * pageSize)
+  // Exclude companies already in ringeliste / active kunder when toggle is on
+  const visibleItems = skjulProspekterte
+    ? filteredItems.filter(c => !ringeliste.has(c.orgnr) && !kunder.has(c.orgnr))
+    : filteredItems
+  // What we display: the slice for the current logical page
+  const displayItems = visibleItems.slice(page * pageSize, (page + 1) * pageSize)
 
   // Total count + total pages
   // - No contact filter: trust Brreg's totals directly
   // - Contact filter on, exhausted: filteredItems.length is the real total
   // - Contact filter on, not exhausted: we don't know the true total; keep showing "+1" page until exhausted
-  const totalCount = hasContactFilter ? filteredItems.length : brregTotal
+  const totalCount = hasContactFilter
+    ? (skjulProspekterte ? visibleItems.length : filteredItems.length)
+    : brregTotal
   const totalPages = hasContactFilter
     ? (exhausted
         ? Math.max(1, Math.ceil(filteredItems.length / pageSize))
@@ -1566,6 +1590,52 @@ function ProspektSok() {
       // silently fail — user sees the button not changing
     } finally {
       setAdding(prev => { const s = new Set(prev); s.delete(company.orgnr); return s })
+    }
+  }
+
+  const { user: currentUser } = useCurrentUser()
+
+  const createKundekort = async (company: Company, kontakter: Kontaktperson[]) => {
+    try {
+      // Insert customer card with sensible defaults pulled from Brreg data
+      const ins: Record<string, unknown> = {
+        bedriftsnavn: company.navn,
+        juridisk_navn: company.navn,
+        org_nummer: company.orgnr,
+        sted: company.kommune,
+        kunde_status: 'lead',
+        kilde: 'prospekt',
+        opprettet_av: currentUser?.id,
+        tildelt_bruker_id: currentUser?.id,
+      }
+      const { data: kunde, error } = await supabase
+        .from('kunder')
+        .insert(ins)
+        .select('id')
+        .single()
+      if (error || !kunde?.id) {
+        alert('Kunne ikke opprette kundekort: ' + (error?.message || 'ukjent'))
+        return
+      }
+
+      // Insert each suggested contact (top one as primary)
+      if (kontakter.length > 0) {
+        const kontaktRows = kontakter.slice(0, 3).map((k, i) => ({
+          kunde_id: kunde.id,
+          navn: k.navn,
+          tittel: k.rolle,
+          telefon: company.telefon || company.mobil || null,
+          epost: company.epost || null,
+          er_primaer: i === 0,
+        }))
+        await supabase.from('kontakter').insert(kontaktRows)
+      }
+
+      // Mark in local sets so the row disappears from prospekt list
+      setKunder(prev => new Set([...prev, company.orgnr]))
+      setSelectedOrgnr(null)
+    } catch (e) {
+      alert('Kunne ikke opprette kundekort: ' + String(e))
     }
   }
 
@@ -1756,6 +1826,26 @@ function ProspektSok() {
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
             Brreg støtter ikke filtrering på kontaktinfo — vi henter sider og filtrerer lokalt når du klikker «Søk med filtre»
           </p>
+        </div>
+
+        {/* Skjul allerede prospekterte */}
+        <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+          <label className="flex items-start gap-2 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={skjulProspekterte}
+              onChange={e => setSkjulProspekterte(e.target.checked)}
+              className="w-4 h-4 mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            <div>
+              <span className="text-sm text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors block">
+                Skjul allerede prospekterte
+              </span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                Skjuler bedrifter som er i ringelisten din eller har et aktivt kundekort.
+              </span>
+            </div>
+          </label>
         </div>
 
         {/* Apply button */}
@@ -2073,6 +2163,7 @@ function ProspektSok() {
           orgnr={selectedOrgnr}
           onClose={() => setSelectedOrgnr(null)}
           onAdd={(company, kontakter) => { addToRingeliste(company, kontakter); setSelectedOrgnr(null) }}
+          onCreateKunde={createKundekort}
           inRingeliste={ringeliste.has(selectedOrgnr)}
           isKunde={kunder.has(selectedOrgnr)}
         />
@@ -2139,6 +2230,8 @@ function NyregistrerteTab() {
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(50)
   const [totalCount, setTotalCount] = useState(0)
+  // Hide companies already in ringeliste / active kunder. Default ON.
+  const [skjulProspekterte, setSkjulProspekterte] = useState(true)
   const [ringeliste, setRingeliste] = useState<Set<string>>(new Set())
   const [kunder, setKunder] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState<Set<string>>(new Set())
@@ -2148,8 +2241,11 @@ function NyregistrerteTab() {
     supabase.from('ringeliste').select('orgnr').then(({ data }) => {
       if (data) setRingeliste(new Set(data.map((r: any) => r.orgnr)))
     })
-    supabase.from('kunder').select('org_nummer').then(({ data }) => {
-      if (data) setKunder(new Set(data.map((k: any) => k.org_nummer).filter(Boolean)))
+    supabase.from('kunder').select('org_nummer, kunde_status').then(({ data }) => {
+      if (data) {
+        const aktive = data.filter((k: any) => k.kunde_status !== 'arkivert')
+        setKunder(new Set(aktive.map((k: any) => k.org_nummer).filter(Boolean)))
+      }
     })
     supabase.from('brreg_sync').select('sist_kjort, antall_hentet').eq('type', 'nyregistrerte').single()
       .then(({ data }) => { if (data) setSyncInfo(data) })
@@ -2177,16 +2273,23 @@ function NyregistrerteTab() {
     if (harTelefon)              query = query.or('telefon.not.is.null,mobil.not.is.null')
     if (harEpost)                query = query.not('epost', 'is', null)
 
+    if (skjulProspekterte) {
+      const exclude = Array.from(new Set([...ringeliste, ...kunder]))
+      if (exclude.length > 0) {
+        query = query.not('orgnr', 'in', `(${exclude.join(',')})`)
+      }
+    }
+
     const fromIdx = page * pageSize
     const toIdx   = fromIdx + pageSize - 1
     const { data, count } = await query.range(fromIdx, toIdx)
     setRows(data || [])
     setTotalCount(count || 0)
     setLoading(false)
-  }, [period, bransjer, orgFormer, kommuner, fraAnsatte, tilAnsatte, harHjemmeside, harTelefon, harEpost, sortField, sortAsc, page, pageSize])
+  }, [period, bransjer, orgFormer, kommuner, fraAnsatte, tilAnsatte, harHjemmeside, harTelefon, harEpost, sortField, sortAsc, page, pageSize, skjulProspekterte, ringeliste, kunder])
 
   // Reset to page 0 when any non-page filter changes
-  useEffect(() => { setPage(0) }, [period, bransjer, orgFormer, kommuner, fraAnsatte, tilAnsatte, harHjemmeside, harTelefon, harEpost, sortField, sortAsc, pageSize])
+  useEffect(() => { setPage(0) }, [period, bransjer, orgFormer, kommuner, fraAnsatte, tilAnsatte, harHjemmeside, harTelefon, harEpost, sortField, sortAsc, pageSize, skjulProspekterte])
   useEffect(() => { loadNyregistrerte() }, [loadNyregistrerte])
 
   // Recompute bransje + kommune counts whenever filters change. Each query
@@ -2339,6 +2442,52 @@ function NyregistrerteTab() {
       // ignore
     } finally {
       setAdding(prev => { const s = new Set(prev); s.delete(row.orgnr); return s })
+    }
+  }
+
+  const { user: currentUser } = useCurrentUser()
+
+  const createKundekort = async (company: Company, kontakter: Kontaktperson[]) => {
+    try {
+      // Insert customer card with sensible defaults pulled from Brreg data
+      const ins: Record<string, unknown> = {
+        bedriftsnavn: company.navn,
+        juridisk_navn: company.navn,
+        org_nummer: company.orgnr,
+        sted: company.kommune,
+        kunde_status: 'lead',
+        kilde: 'nyregistrerte',
+        opprettet_av: currentUser?.id,
+        tildelt_bruker_id: currentUser?.id,
+      }
+      const { data: kunde, error } = await supabase
+        .from('kunder')
+        .insert(ins)
+        .select('id')
+        .single()
+      if (error || !kunde?.id) {
+        alert('Kunne ikke opprette kundekort: ' + (error?.message || 'ukjent'))
+        return
+      }
+
+      // Insert each suggested contact (top one as primary)
+      if (kontakter.length > 0) {
+        const kontaktRows = kontakter.slice(0, 3).map((k, i) => ({
+          kunde_id: kunde.id,
+          navn: k.navn,
+          tittel: k.rolle,
+          telefon: company.telefon || company.mobil || null,
+          epost: company.epost || null,
+          er_primaer: i === 0,
+        }))
+        await supabase.from('kontakter').insert(kontaktRows)
+      }
+
+      // Mark in local sets so the row disappears from prospekt list
+      setKunder(prev => new Set([...prev, company.orgnr]))
+      setSelectedOrgnr(null)
+    } catch (e) {
+      alert('Kunne ikke opprette kundekort: ' + String(e))
     }
   }
 
@@ -2511,6 +2660,26 @@ function NyregistrerteTab() {
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
             Filtreres på lagrede kolonner — bare rader synkronisert etter at funksjonen ble lagt til vil ha data her.
           </p>
+        </div>
+
+        {/* Skjul allerede prospekterte */}
+        <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+          <label className="flex items-start gap-2 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={skjulProspekterte}
+              onChange={e => setSkjulProspekterte(e.target.checked)}
+              className="w-4 h-4 mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            <div>
+              <span className="text-sm text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors block">
+                Skjul allerede prospekterte
+              </span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                Skjuler bedrifter som er i ringelisten din eller har et aktivt kundekort.
+              </span>
+            </div>
+          </label>
         </div>
 
         {/* Sync info + button */}
@@ -2759,6 +2928,7 @@ function NyregistrerteTab() {
         <CompanyDetailPanel
           orgnr={selectedOrgnr}
           onClose={() => setSelectedOrgnr(null)}
+          onCreateKunde={createKundekort}
           onAdd={(company, kontakter) => {
             // For nyregistrerte, the "row" object has different field names than Company.
             // Build a synthetic row from the Company object.
