@@ -783,14 +783,14 @@ function BrregDetails({ orgnr }: { orgnr: string }) {
 
   if (loading) {
     return (
-      <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
-        <Loader2 className="w-3 h-3 animate-spin" /> Henter data fra Brønnøysundregistrene…
+      <div className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2">
+        <Loader2 className="w-4 h-4 animate-spin" /> Henter data fra Brønnøysundregistrene…
       </div>
     )
   }
   if (error || !data) {
     return (
-      <div className="text-xs text-rose-600 dark:text-rose-400">
+      <div className="text-sm text-rose-600 dark:text-rose-400">
         Kunne ikke hente Brreg-data: {error || 'ukjent feil'}
       </div>
     )
@@ -803,61 +803,61 @@ function BrregDetails({ orgnr }: { orgnr: string }) {
     : { label: 'Aktiv', color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' }
 
   return (
-    <div className="space-y-3 text-xs">
+    <div className="space-y-4 text-sm">
       <div className="flex items-center gap-2">
-        <span className="uppercase tracking-wide text-slate-500 dark:text-slate-400">Fra Brønnøysund</span>
+        <span className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Fra Brønnøysund</span>
         <span className={`px-2 py-0.5 rounded font-medium ${status.color}`}>{status.label}</span>
       </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
         {data.organisasjonsform?.beskrivelse && (
-          <DetailRow icon={<Briefcase className="w-3 h-3" />} label="Organisasjonsform">
+          <DetailRow icon={<Briefcase className="w-3.5 h-3.5" />} label="Organisasjonsform">
             {data.organisasjonsform.beskrivelse}
             {data.organisasjonsform.kode && <span className="text-slate-400"> ({data.organisasjonsform.kode})</span>}
           </DetailRow>
         )}
         {typeof data.antallAnsatte === 'number' && (
-          <DetailRow icon={<Users className="w-3 h-3" />} label="Ansatte">{data.antallAnsatte}</DetailRow>
+          <DetailRow icon={<Users className="w-3.5 h-3.5" />} label="Ansatte">{data.antallAnsatte}</DetailRow>
         )}
         {data.naeringskode1 && (
-          <DetailRow icon={<Briefcase className="w-3 h-3" />} label="Næringskode">
+          <DetailRow icon={<Briefcase className="w-3.5 h-3.5" />} label="Næringskode">
             {data.naeringskode1.kode} — {data.naeringskode1.beskrivelse}
           </DetailRow>
         )}
         {adresse && (
-          <DetailRow icon={<MapPin className="w-3 h-3" />} label="Forretningsadresse">{adresse}</DetailRow>
+          <DetailRow icon={<MapPin className="w-3.5 h-3.5" />} label="Forretningsadresse">{adresse}</DetailRow>
         )}
         {data.registreringsdatoEnhetsregisteret && (
-          <DetailRow icon={<Calendar className="w-3 h-3" />} label="Registrert">
+          <DetailRow icon={<Calendar className="w-3.5 h-3.5" />} label="Registrert">
             {new Date(data.registreringsdatoEnhetsregisteret).toLocaleDateString('nb-NO')}
           </DetailRow>
         )}
         {data.stiftelsesdato && (
-          <DetailRow icon={<Calendar className="w-3 h-3" />} label="Stiftet">
+          <DetailRow icon={<Calendar className="w-3.5 h-3.5" />} label="Stiftet">
             {new Date(data.stiftelsesdato).toLocaleDateString('nb-NO')}
           </DetailRow>
         )}
-        <DetailRow icon={<FileCheck className="w-3 h-3" />} label="MVA-registrert">
+        <DetailRow icon={<FileCheck className="w-3.5 h-3.5" />} label="MVA-registrert">
           {data.registrertIMvaregisteret ? 'Ja' : 'Nei'}
         </DetailRow>
         {data.telefon && (
-          <DetailRow icon={<Phone className="w-3 h-3" />} label="Telefon">
+          <DetailRow icon={<Phone className="w-3.5 h-3.5" />} label="Telefon">
             <a href={`tel:${data.telefon.replace(/\s/g, '')}`} className="text-blue-600 dark:text-blue-400 hover:underline">
               {data.telefon}
             </a>
           </DetailRow>
         )}
         {data.epostadresse && (
-          <DetailRow icon={<Mail className="w-3 h-3" />} label="E-post">
+          <DetailRow icon={<Mail className="w-3.5 h-3.5" />} label="E-post">
             <a href={`mailto:${data.epostadresse}`} className="text-blue-600 dark:text-blue-400 hover:underline">
               {data.epostadresse}
             </a>
           </DetailRow>
         )}
         {data.hjemmeside && (
-          <DetailRow icon={<Globe className="w-3 h-3" />} label="Hjemmeside">
+          <DetailRow icon={<Globe className="w-3.5 h-3.5" />} label="Hjemmeside">
             <a href={data.hjemmeside.startsWith('http') ? data.hjemmeside : `https://${data.hjemmeside}`}
                target="_blank" rel="noopener noreferrer"
-               className="text-blue-600 dark:text-blue-400 hover:underline truncate inline-block max-w-[12rem]">
+               className="text-blue-600 dark:text-blue-400 hover:underline truncate inline-block max-w-[16rem]">
               {data.hjemmeside}
             </a>
           </DetailRow>
@@ -865,17 +865,17 @@ function BrregDetails({ orgnr }: { orgnr: string }) {
       </div>
       {data.vedtektsfestetFormaal && data.vedtektsfestetFormaal.length > 0 && (
         <div>
-          <div className="text-slate-500 dark:text-slate-400 mb-1">Vedtektsfestet formål</div>
+          <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">Vedtektsfestet formål</div>
           <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{data.vedtektsfestetFormaal.join(' ')}</p>
         </div>
       )}
       {data.aktivitet && data.aktivitet.length > 0 && (
         <div>
-          <div className="text-slate-500 dark:text-slate-400 mb-1">Aktivitet</div>
+          <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">Aktivitet</div>
           <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{data.aktivitet.join(' ')}</p>
         </div>
       )}
-      <div className="text-slate-400 dark:text-slate-500 pt-1">
+      <div className="text-xs text-slate-400 dark:text-slate-500 pt-1">
         Mer info kommer snart fra andre kilder (Proff, hjemmeside-analyse, etc).
       </div>
     </div>
@@ -885,7 +885,7 @@ function BrregDetails({ orgnr }: { orgnr: string }) {
 function DetailRow({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 mb-0.5">
+      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">
         {icon}
         <span>{label}</span>
       </div>
