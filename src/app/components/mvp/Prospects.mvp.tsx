@@ -1101,7 +1101,7 @@ function CompanyDetailPanel({
 
             {/* Brreg-lenke */}
             <a
-              href={`https://www.brreg.no/lookup/?startswith=${orgnr}`}
+              href={`https://virksomhet.brreg.no/nb/oppslag/enheter/${orgnr}`}
               target="_blank" rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
             >
