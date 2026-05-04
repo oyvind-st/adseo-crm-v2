@@ -78,12 +78,24 @@ let _bransjerCache: BransjerData | null = null
 async function loadBransjerFromSupabase(): Promise<BransjerData> {
   if (_bransjerCache) return _bransjerCache
   try {
-    const { data, error } = await supabase
-      .from('brreg_naeringskoder')
-      .select('kode, parent_kode, level, navn')
-      .order('kode')
-      .range(0, 2999)  // PostgREST default cap is 1000; full NACE catalog is 1811 rows.
-    if (error || !data) return { grupper: [], alleKoder: [] }
+    // Supabase enforces a server-side max of 1000 rows per query (db-max-rows).
+    // The NACE catalog has 1811 rows, so we paginate explicitly until we've
+    // pulled them all.
+    const PAGE = 1000
+    const all: any[] = []
+    for (let off = 0; off < 5000; off += PAGE) {
+      const { data: chunk, error } = await supabase
+        .from('brreg_naeringskoder')
+        .select('kode, parent_kode, level, navn')
+        .order('kode')
+        .range(off, off + PAGE - 1)
+      if (error) return { grupper: [], alleKoder: [] }
+      if (!chunk || chunk.length === 0) break
+      all.push(...chunk)
+      if (chunk.length < PAGE) break
+    }
+    const data: any[] | null = all.length > 0 ? all : null
+    if (!data) return { grupper: [], alleKoder: [] }
 
     // Build section (level 1) and division (level 2) lookups
     const sections = new Map<string, string>()
