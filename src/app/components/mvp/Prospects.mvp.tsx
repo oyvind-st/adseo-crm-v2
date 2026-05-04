@@ -389,12 +389,29 @@ function KommuneCombobox({
     })
   }
 
-  // Group by fylke
-  const grouped = FYLKE_ORDER.map(kode => {
-    const navn = FYLKE_NAVN[kode]
-    const koms = kommuner.filter(k => k.nr.slice(0, 2) === kode)
-    return { kode, navn, kommuner: koms }
-  }).filter(g => g.kommuner.length > 0)
+  // Build groups dynamically from actual API data (not limited to FYLKE_ORDER)
+  const grouped = (() => {
+    const byKode: Record<string, { nr: string; navn: string }[]> = {}
+    kommuner.forEach(k => {
+      const kode = k.nr.slice(0, 2)
+      if (!byKode[kode]) byKode[kode] = []
+      byKode[kode].push(k)
+    })
+    return Object.entries(byKode)
+      .map(([kode, koms]) => ({
+        kode,
+        navn: FYLKE_NAVN[kode] || `Fylke ${kode}`,
+        kommuner: koms.sort((a, b) => a.navn.localeCompare(b.navn, 'nb'))
+      }))
+      .sort((a, b) => {
+        const ai = FYLKE_ORDER.indexOf(a.kode)
+        const bi = FYLKE_ORDER.indexOf(b.kode)
+        if (ai === -1 && bi === -1) return a.navn.localeCompare(b.navn, 'nb')
+        if (ai === -1) return 1
+        if (bi === -1) return -1
+        return ai - bi
+      })
+  })()
 
   // Searching: flat list across all fylker
   const isSearching = query.trim().length > 0
@@ -438,7 +455,7 @@ function KommuneCombobox({
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-xl max-h-72 overflow-hidden flex flex-col">
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-xl max-h-96 overflow-hidden flex flex-col">
           {/* Search */}
           <div className="p-2 border-b border-slate-100 dark:border-slate-700 flex-shrink-0">
             <input
