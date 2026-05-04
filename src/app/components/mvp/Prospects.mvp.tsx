@@ -2061,7 +2061,7 @@ function NyregistrerteTab() {
     // Sort by the user's chosen field, then ALWAYS by orgnr ascending as a
     // tiebreaker so two rows with identical registrert_dato don't swap places
     // between refreshes.
-    let query = supabase.from('nyregistrerte').select('*')
+    let query = supabase.from('nyregistrerte').select('*', { count: 'exact' })
       .order(sortField, { ascending: sortAsc, nullsFirst: false })
       .order('orgnr', { ascending: true })
 
@@ -2075,11 +2075,16 @@ function NyregistrerteTab() {
     if (harTelefon)      query = query.or('telefon.not.is.null,mobil.not.is.null')
     if (harEpost)        query = query.not('epost', 'is', null)
 
-    const { data } = await query.limit(200)
+    const fromIdx = page * pageSize
+    const toIdx   = fromIdx + pageSize - 1
+    const { data, count } = await query.range(fromIdx, toIdx)
     setRows(data || [])
+    setTotalCount(count || 0)
     setLoading(false)
-  }, [period, bransjer, kommuner, harHjemmeside, harTelefon, harEpost, sortField, sortAsc])
+  }, [period, bransjer, kommuner, harHjemmeside, harTelefon, harEpost, sortField, sortAsc, page, pageSize])
 
+  // Reset to page 0 when any non-page filter changes
+  useEffect(() => { setPage(0) }, [period, bransjer, kommuner, harHjemmeside, harTelefon, harEpost, sortField, sortAsc, pageSize])
   useEffect(() => { loadNyregistrerte() }, [loadNyregistrerte])
 
   // Recompute bransje + kommune counts whenever filters change. Each query
@@ -2143,24 +2148,39 @@ function NyregistrerteTab() {
     try {
       const today = new Date().toISOString().slice(0, 10)
       const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
-      const url = `${BRREG}?fraRegistreringsdatoEnhetsregisteret=${from}&sort=registreringsdatoEnhetsregisteret,desc&size=200&konkurs=false&underAvvikling=false`
-      const resp = await fetch(url, { headers: { Accept: 'application/json' } })
-      const data = await resp.json()
-      const fetchedRows = (data._embedded?.enheter || []).map(mapEnhet).map((e: Company) => ({
-        orgnr: e.orgnr, navn: e.navn, org_form: e.orgForm,
-        bransje_kode: e.bransjeKode, bransje_navn: e.bransjeNavn,
-        kommune: e.kommune, kommunenummer: e.kommunenummer,
-        ansatte: e.ansatte, registrert_dato: e.registrertDato,
-        mva_registrert: e.mvaRegistrert,
-        hjemmeside: e.hjemmeside, telefon: e.telefon, mobil: e.mobil, epost: e.epost,
-        hentet_dato: new Date().toISOString(),
-      }))
-      await supabase.from('nyregistrerte').upsert(fetchedRows, { onConflict: 'orgnr' })
+      // Brreg supports up to size=10 000 per call. Last 30 days is typically
+      // 8 000 – 25 000 new companies, so we paginate with size=5000 (3-5 calls).
+      const PAGE_SIZE_SYNC = 5000
+      let totalSaved = 0
+      let pageIdx = 0
+      let totalPages = 1
+      while (pageIdx < totalPages) {
+        const url = `${BRREG}?fraRegistreringsdatoEnhetsregisteret=${from}&sort=registreringsdatoEnhetsregisteret,desc&size=${PAGE_SIZE_SYNC}&page=${pageIdx}&konkurs=false&underAvvikling=false`
+        const resp = await fetch(url, { headers: { Accept: 'application/json' } })
+        const data = await resp.json()
+        totalPages = data.page?.totalPages || 1
+        const fetchedRows = (data._embedded?.enheter || []).map(mapEnhet).map((e: Company) => ({
+          orgnr: e.orgnr, navn: e.navn, org_form: e.orgForm,
+          bransje_kode: e.bransjeKode, bransje_navn: e.bransjeNavn,
+          kommune: e.kommune, kommunenummer: e.kommunenummer,
+          ansatte: e.ansatte, registrert_dato: e.registrertDato,
+          mva_registrert: e.mvaRegistrert,
+          hjemmeside: e.hjemmeside, telefon: e.telefon, mobil: e.mobil, epost: e.epost,
+          hentet_dato: new Date().toISOString(),
+        }))
+        if (fetchedRows.length === 0) break
+        // Upsert in chunks of 1000 — Supabase has request size limits on huge bodies.
+        for (let j = 0; j < fetchedRows.length; j += 1000) {
+          await supabase.from('nyregistrerte').upsert(fetchedRows.slice(j, j + 1000), { onConflict: 'orgnr' })
+        }
+        totalSaved += fetchedRows.length
+        pageIdx += 1
+      }
       await supabase.from('brreg_sync').upsert(
-        { type: 'nyregistrerte', sist_kjort: new Date().toISOString(), antall_hentet: fetchedRows.length, siste_dato: today, status: 'ok' },
+        { type: 'nyregistrerte', sist_kjort: new Date().toISOString(), antall_hentet: totalSaved, siste_dato: today, status: 'ok' },
         { onConflict: 'type' }
       )
-      setSyncInfo({ sist_kjort: new Date().toISOString(), antall_hentet: fetchedRows.length })
+      setSyncInfo({ sist_kjort: new Date().toISOString(), antall_hentet: totalSaved })
       loadNyregistrerte()
     } catch {
       // ignore
@@ -2370,7 +2390,7 @@ function NyregistrerteTab() {
               Velg alle på siden
             </label>
             <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-full px-2 text-xs font-medium py-0.5">
-              {rows.length.toLocaleString('nb')} bedrifter
+              {totalCount.toLocaleString('nb')} bedrifter
             </span>
           </div>
           {selected.size > 0 && (
