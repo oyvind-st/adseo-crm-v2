@@ -182,11 +182,20 @@ interface Kontaktperson {
   prokuraFellesskap: boolean    // Part of a multi-person prokura combination
 }
 
+interface FullmaktPerson {
+  key: string
+  navn: string
+  fodselsdato?: string          // YYYY-MM-DD (normalized)
+  rolleKode: string             // e.g. POHV, DAGL, LEDE
+  rolleTekst: string            // e.g. "Prokura hver for seg", "Daglig leder"
+  alene: boolean                // true when in a 1-person combination
+}
+
 interface FullmaktData {
   fritekst?: string             // Free-text signing rule (e.g. "Daglig leder alene...")
-  // Map from person key (name|dob) to roles found in signing combinations.
-  alenePersoner: Set<string>    // Persons in 1-person combinations
+  alenePersoner: Set<string>    // Persons in 1-person combinations (by personKey)
   fellesPersoner: Set<string>   // Persons in multi-person combinations
+  personer: FullmaktPerson[]    // All persons we encountered with details
 }
 
 // Priority order based on Norwegian B2B sales reality. Tier 1 = primary
@@ -200,6 +209,8 @@ const KONTAKT_PRIORITET: Record<string, number> = {
   BSTV: 5,   // Bestyrende reder
   KONT: 6,   // Eksplisitt kontaktperson
   FFGM: 7,   // Forretningsfører
+  POHV: 10,  // Prokura alene — typically C-suite (CFO/COO/legal)
+  POFL: 20,  // Prokura i fellesskap — less actionable but still relevant
   // Tier 2 — only if no Tier 1 found
   LEDE: 50,  // Styreleder — fallback for small AS without DAGL
 }
@@ -236,14 +247,30 @@ async function fetchFullmakt(orgnr: string, type: 'signatur' | 'prokura'): Promi
       fritekst: grunnlag.signaturProkuraRoller?.signaturProkuraFritekst,
       alenePersoner: new Set(),
       fellesPersoner: new Set(),
+      personer: [],
     }
 
+    const seen = new Set<string>()
     const kombinasjoner = data.signeringsKombinasjon?.kombinasjon || []
     for (const kombi of kombinasjoner) {
       const personer = kombi.personRolleKombinasjon || []
-      const target = personer.length === 1 ? result.alenePersoner : result.fellesPersoner
+      const alene = personer.length === 1
+      const target = alene ? result.alenePersoner : result.fellesPersoner
       for (const p of personer) {
-        target.add(personKey(p.navn, p.fodselsdato))
+        const dob = normalizeFodselsdato(p.fodselsdato)
+        const key = personKey(p.navn, dob)
+        target.add(key)
+        if (!seen.has(key)) {
+          seen.add(key)
+          result.personer.push({
+            key,
+            navn: p.navn,
+            fodselsdato: dob || undefined,
+            rolleKode: p.rolle?.kode || '',
+            rolleTekst: p.rolle?.tekstforklaring || p.rolle?.kode || '',
+            alene,
+          })
+        }
       }
     }
     return result
@@ -268,7 +295,8 @@ async function fetchKontaktpersoner(orgnr: string): Promise<KontakterResult> {
     if (!rollerResp.ok) return { kontakter: [] }
     const data = await rollerResp.json()
 
-    const all: Kontaktperson[] = []
+    // First pass: build kontakter from /roller (typed Tier-1/Tier-2 roles)
+    const byKey = new Map<string, Kontaktperson>()
     for (const rg of data.rollegrupper || []) {
       for (const r of rg.roller || []) {
         if (r.fratraadt || r.avregistrert) continue
@@ -295,7 +323,12 @@ async function fetchKontaktpersoner(orgnr: string): Promise<KontakterResult> {
         if (!navn) continue
 
         const key = personKey(navn, fodselsdato)
-        all.push({
+        // If the same person appears in multiple role groups, keep the
+        // higher-priority one (lowest number wins).
+        const prev = byKey.get(key)
+        if (prev && prev.prioritet <= prio) continue
+
+        byKey.set(key, {
           kode,
           rolle: r.type?.beskrivelse || kode,
           navn,
@@ -310,6 +343,28 @@ async function fetchKontaktpersoner(orgnr: string): Promise<KontakterResult> {
       }
     }
 
+    // Second pass: add prokurister from /prokura who weren't in /roller. These
+    // are typically executives (CFO/COO/legal) and very relevant for B2B sales.
+    for (const p of prokura.personer) {
+      if (byKey.has(p.key)) continue  // already covered via /roller
+      const prio = p.alene ? KONTAKT_PRIORITET.POHV : KONTAKT_PRIORITET.POFL
+      const fodselsaar = p.fodselsdato ? parseInt(p.fodselsdato.slice(0, 4)) : undefined
+      byKey.set(p.key, {
+        kode: p.alene ? 'POHV' : 'POFL',
+        rolle: p.rolleTekst || (p.alene ? 'Prokura hver for seg' : 'Prokura i fellesskap'),
+        navn: p.navn,
+        fodselsdato: p.fodselsdato,
+        fodselsaar,
+        prioritet: prio,
+        signaturAlene: signatur.alenePersoner.has(p.key),
+        signaturFellesskap: signatur.fellesPersoner.has(p.key),
+        prokuraAlene: p.alene,
+        prokuraFellesskap: !p.alene,
+      })
+    }
+
+    const all = Array.from(byKey.values())
+    // Tier-2 (LEDE) is fallback only when no Tier-1 contact exists.
     const hasTier1 = all.some(k => k.prioritet < 50)
     const filtered = hasTier1 ? all.filter(k => k.prioritet < 50) : all
     const kontakter = filtered.sort((a, b) => {
