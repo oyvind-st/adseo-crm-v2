@@ -6,6 +6,7 @@ import {
   Zap, Globe, Phone, Mail, ExternalLink,
   ArrowRight, FileText
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
 import { useCurrentUser } from '../../contexts/UserContext'
 
@@ -871,10 +872,23 @@ function CompanyDetailPanel({
   orgnr: string
   onClose: () => void
   onAdd: (c: Company, kontakter: Kontaktperson[]) => void
-  onCreateKunde?: (c: Company, kontakter: Kontaktperson[]) => void
+  onCreateKunde?: (c: Company, kontakter: Kontaktperson[]) => Promise<string | null>
   inRingeliste: boolean
   isKunde: boolean
 }) {
+  const navigate = useNavigate()
+  const [opprettetKundeId, setOpprettetKundeId] = useState<string | null>(null)
+  const [oppretter, setOppretter] = useState(false)
+  const handleOpprett = async () => {
+    if (!company || !onCreateKunde) return
+    setOppretter(true)
+    try {
+      const id = await onCreateKunde(company, foreslatteKontakter)
+      if (id) setOpprettetKundeId(id)
+    } finally {
+      setOppretter(false)
+    }
+  }
   const [company, setCompany] = useState<Company | null>(null)
   const [loading, setLoading] = useState(true)
   const [kontakter, setKontakter] = useState<Kontaktperson[]>([])
@@ -1127,11 +1141,47 @@ function CompanyDetailPanel({
 
         {/* Footer action */}
         <div className="sticky bottom-0 px-6 py-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
-          {isKunde ? (
+          {opprettetKundeId ? (
+            <div className="rounded-lg border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-300 font-medium">
+                <CheckCircle className="w-4 h-4" /> Kundekort opprettet
+              </div>
+              <p className="text-xs text-green-700/80 dark:text-green-300/80">
+                {company?.navn} er nå lagt til som kunde med status «lead».
+                {foreslatteKontakter.length > 0 && ` ${Math.min(foreslatteKontakter.length, 3)} kontakt(er) ble lagt til.`}
+              </p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => navigate(`/customers/${opprettetKundeId}`)}
+                  className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2"
+                >
+                  <ArrowRight className="w-4 h-4" /> Åpne kundekort
+                </button>
+                <button
+                  onClick={onClose}
+                  className="px-3 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg font-medium text-sm"
+                >
+                  Lukk
+                </button>
+              </div>
+            </div>
+          ) : isKunde ? (
             <div className="text-center text-sm text-slate-400">Allerede registrert som kunde</div>
           ) : inRingeliste ? (
-            <div className="flex items-center justify-center gap-2 text-sm text-green-600 dark:text-green-400">
-              <CheckCircle className="w-4 h-4" /> Lagt til i ringelisten
+            <div className="space-y-2">
+              <div className="flex items-center justify-center gap-2 text-sm text-green-600 dark:text-green-400">
+                <CheckCircle className="w-4 h-4" /> Lagt til i ringelisten
+              </div>
+              {company && onCreateKunde && (
+                <button
+                  onClick={handleOpprett}
+                  disabled={oppretter}
+                  className="w-full px-4 py-2.5 border border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                  {oppretter ? 'Oppretter…' : 'Opprett kundekort'}
+                </button>
+              )}
             </div>
           ) : company ? (
             <div className="space-y-2">
@@ -1145,13 +1195,16 @@ function CompanyDetailPanel({
                   <span className="text-xs opacity-90">— {foreslatteKontakter[0].navn.split(' ')[0]}</span>
                 )}
               </button>
-              <button
-                onClick={() => onCreateKunde && onCreateKunde(company, foreslatteKontakter)}
-                className="w-full px-4 py-2.5 border border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors"
-              >
-                <ArrowRight className="w-4 h-4" />
-                Opprett kundekort
-              </button>
+              {onCreateKunde && (
+                <button
+                  onClick={handleOpprett}
+                  disabled={oppretter}
+                  className="w-full px-4 py-2.5 border border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                  {oppretter ? 'Oppretter…' : 'Opprett kundekort'}
+                </button>
+              )}
             </div>
           ) : null}
         </div>
@@ -1595,9 +1648,8 @@ function ProspektSok() {
 
   const { user: currentUser } = useCurrentUser()
 
-  const createKundekort = async (company: Company, kontakter: Kontaktperson[]) => {
+  const createKundekort = async (company: Company, kontakter: Kontaktperson[]): Promise<string | null> => {
     try {
-      // Insert customer card with sensible defaults pulled from Brreg data
       const ins: Record<string, unknown> = {
         bedriftsnavn: company.navn,
         juridisk_navn: company.navn,
@@ -1615,10 +1667,8 @@ function ProspektSok() {
         .single()
       if (error || !kunde?.id) {
         alert('Kunne ikke opprette kundekort: ' + (error?.message || 'ukjent'))
-        return
+        return null
       }
-
-      // Insert each suggested contact (top one as primary)
       if (kontakter.length > 0) {
         const kontaktRows = kontakter.slice(0, 3).map((k, i) => ({
           kunde_id: kunde.id,
@@ -1630,12 +1680,11 @@ function ProspektSok() {
         }))
         await supabase.from('kontakter').insert(kontaktRows)
       }
-
-      // Mark in local sets so the row disappears from prospekt list
       setKunder(prev => new Set([...prev, company.orgnr]))
-      setSelectedOrgnr(null)
+      return kunde.id as string
     } catch (e) {
       alert('Kunne ikke opprette kundekort: ' + String(e))
+      return null
     }
   }
 
@@ -2447,9 +2496,8 @@ function NyregistrerteTab() {
 
   const { user: currentUser } = useCurrentUser()
 
-  const createKundekort = async (company: Company, kontakter: Kontaktperson[]) => {
+  const createKundekort = async (company: Company, kontakter: Kontaktperson[]): Promise<string | null> => {
     try {
-      // Insert customer card with sensible defaults pulled from Brreg data
       const ins: Record<string, unknown> = {
         bedriftsnavn: company.navn,
         juridisk_navn: company.navn,
@@ -2467,10 +2515,8 @@ function NyregistrerteTab() {
         .single()
       if (error || !kunde?.id) {
         alert('Kunne ikke opprette kundekort: ' + (error?.message || 'ukjent'))
-        return
+        return null
       }
-
-      // Insert each suggested contact (top one as primary)
       if (kontakter.length > 0) {
         const kontaktRows = kontakter.slice(0, 3).map((k, i) => ({
           kunde_id: kunde.id,
@@ -2482,12 +2528,11 @@ function NyregistrerteTab() {
         }))
         await supabase.from('kontakter').insert(kontaktRows)
       }
-
-      // Mark in local sets so the row disappears from prospekt list
       setKunder(prev => new Set([...prev, company.orgnr]))
-      setSelectedOrgnr(null)
+      return kunde.id as string
     } catch (e) {
       alert('Kunne ikke opprette kundekort: ' + String(e))
+      return null
     }
   }
 
