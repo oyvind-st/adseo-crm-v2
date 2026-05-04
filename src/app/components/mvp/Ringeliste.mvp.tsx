@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Phone, PhoneCall, PhoneOff, Building2, Calendar, MapPin, Users,
-  CheckCircle, XCircle, Clock, MessageSquare, ArrowRight, Plus,
-  ExternalLink, Globe, Mail, RefreshCw, Filter, ChevronDown,
-  TrendingUp, BarChart3, User as UserIcon
+  Phone, PhoneCall, Building2, Calendar, MapPin, Users,
+  CheckCircle, Clock, ArrowRight, Plus, Trash2,
+  ExternalLink, Globe, Filter, RefreshCw, X,
+  TrendingUp, BarChart3, AlertCircle
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useCurrentUser } from '../../contexts/UserContext'
@@ -12,7 +12,13 @@ import { useCurrentUser } from '../../contexts/UserContext'
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
-type Kontakt = { navn: string; rolle: string; fodselsdato?: string }
+type Kontakt = {
+  navn: string
+  rolle: string
+  telefon?: string | null
+  epost?: string | null
+  fodselsdato?: string
+}
 
 type RingeRow = {
   id: string
@@ -24,35 +30,56 @@ type RingeRow = {
   ansatte: number | null
   registrert_dato: string | null
   stage: string | null
+  status: string | null
   kontaktperson_navn: string | null
   kontaktperson_rolle: string | null
   kontaktpersoner: Kontakt[] | null
   tildelt_bruker_id: string | null
-  hjemmeside?: string | null
   telefon?: string | null
   epost?: string | null
+  hjemmeside?: string | null
+  antall_forsok: number | null
+  siste_ring_dato: string | null
 }
 
 type Profile = { id: string; navn: string; epost: string }
 
-type Outcome = 'svar' | 'beskjed' | 'ikke_svar' | 'callback' | 'kunde' | 'ikke_interessert'
+type Outcome = 'snakket' | 'mote' | 'callback' | 'kunde' | 'ikke_svar' | 'ikke_interessert'
 
 const OUTCOME_LABEL: Record<Outcome, string> = {
-  svar: 'Snakket med',
-  beskjed: 'La beskjed',
-  ikke_svar: 'Ikke svar',
+  snakket: 'Snakket med',
+  mote: 'Booket møte',
   callback: 'Avtalt callback',
   kunde: 'Ble kunde',
+  ikke_svar: 'Ikke svar',
   ikke_interessert: 'Ikke interessert',
 }
 
 const OUTCOME_COLOR: Record<Outcome, string> = {
-  svar: 'bg-blue-600 hover:bg-blue-700',
-  beskjed: 'bg-slate-600 hover:bg-slate-700',
-  ikke_svar: 'bg-slate-500 hover:bg-slate-600',
+  snakket: 'bg-blue-600 hover:bg-blue-700',
+  mote: 'bg-purple-600 hover:bg-purple-700',
   callback: 'bg-amber-600 hover:bg-amber-700',
   kunde: 'bg-green-600 hover:bg-green-700',
+  ikke_svar: 'bg-slate-500 hover:bg-slate-600',
   ikke_interessert: 'bg-rose-600 hover:bg-rose-700',
+}
+
+// Outcomes som lager kundekort + oppgave
+const KUNDE_OUTCOMES: Outcome[] = ['snakket', 'mote', 'callback', 'kunde']
+
+// Default antall dager til oppgavens frist for hvert utfall
+const DEFAULT_OPPGAVE_DAGER: Partial<Record<Outcome, number>> = {
+  snakket: 7,
+  mote: 1,
+  callback: 7,
+  kunde: 3,
+}
+
+const OPPGAVE_TITTEL: Partial<Record<Outcome, (navn: string) => string>> = {
+  snakket: (n) => `Følg opp samtale med ${n}`,
+  mote: (n) => `Forbered møte med ${n}`,
+  callback: (n) => `Ring ${n} tilbake`,
+  kunde: (n) => `Onboard ${n}`,
 }
 
 // ─────────────────────────────────────────────
@@ -97,6 +124,30 @@ function startOfWeekISO(): string {
   return d.toISOString()
 }
 
+function plusDays(n: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + n)
+  // Strip seconds for datetime-local
+  d.setSeconds(0, 0)
+  return d.toISOString().slice(0, 16)
+}
+
+function daysSince(iso?: string | null): number | null {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  return Math.floor((Date.now() - t) / (1000 * 60 * 60 * 24))
+}
+
+function formatRelative(iso?: string | null): string | null {
+  const days = daysSince(iso)
+  if (days === null) return null
+  if (days === 0) return 'i dag'
+  if (days === 1) return 'i går'
+  if (days < 7) return `${days} dager siden`
+  if (days < 30) return `${Math.floor(days / 7)} uker siden`
+  return `${Math.floor(days / 30)} mnd siden`
+}
+
 // ─────────────────────────────────────────────
 // Main component
 // ─────────────────────────────────────────────
@@ -108,11 +159,6 @@ export function RingelisteMVP() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [callStart, setCallStart] = useState<number | null>(null)
-  const [callTick, setCallTick] = useState(0)
-  const [notat, setNotat] = useState('')
-  const [callbackDato, setCallbackDato] = useState('')
-  const [savingOutcome, setSavingOutcome] = useState<Outcome | null>(null)
 
   // filters
   const [brukerFilter, setBrukerFilter] = useState<'min' | 'alle' | string>('min')
@@ -122,32 +168,24 @@ export function RingelisteMVP() {
   const [statsToday, setStatsToday] = useState({ totalt: 0, svar: 0, kunde: 0 })
   const [statsWeek, setStatsWeek] = useState({ totalt: 0, kunde: 0 })
 
-  // call timer tick
-  useEffect(() => {
-    if (!callStart) return
-    const t = setInterval(() => setCallTick(x => x + 1), 1000)
-    return () => clearInterval(t)
-  }, [callStart])
-
-  // Load profiles for filter
+  // Load profiles
   useEffect(() => {
     supabase.from('profiles').select('id, navn, epost').order('navn').then(({ data }) => {
       setProfiles((data || []) as Profile[])
     })
   }, [])
 
-  // Load ringeliste
+  // Load ringeliste — filter ut konvertert/avvist
   const loadRows = useCallback(async () => {
-    // 'min' requires user.id — skip if not loaded yet
     if (brukerFilter === 'min' && !user?.id) return
     setLoading(true)
     let q = supabase
       .from('ringeliste')
       .select('*')
+      .not('stage', 'in', '(konvertert,avvist)')
       .limit(500)
 
     if (brukerFilter === 'min' && user?.id) {
-      // Show rows assigned to me OR unassigned (no eier ennå)
       q = q.or(`tildelt_bruker_id.eq.${user.id},tildelt_bruker_id.is.null`)
     } else if (brukerFilter !== 'alle' && brukerFilter !== 'min') {
       q = q.eq('tildelt_bruker_id', brukerFilter)
@@ -179,18 +217,17 @@ export function RingelisteMVP() {
     const w = weekLogs || []
     setStatsToday({
       totalt: t.length,
-      svar: t.filter((r: any) => r.utfall === 'svar' || r.utfall === 'kunde').length,
-      kunde: t.filter((r: any) => r.utfall === 'kunde').length,
+      svar: t.filter((r: any) => r.utfall === 'snakket' || r.utfall === 'mote' || r.utfall === 'callback' || r.utfall === 'kunde').length,
+      kunde: t.filter((r: any) => r.utfall === 'kunde' || r.utfall === 'mote').length,
     })
     setStatsWeek({
       totalt: w.length,
-      kunde: w.filter((r: any) => r.utfall === 'kunde').length,
+      kunde: w.filter((r: any) => r.utfall === 'kunde' || r.utfall === 'mote').length,
     })
   }, [user?.id])
 
   useEffect(() => { loadStats() }, [loadStats])
 
-  // Filter rows by search
   const visibleRows = useMemo(() => {
     if (!searchQ.trim()) return rows
     const q = searchQ.toLowerCase()
@@ -204,104 +241,6 @@ export function RingelisteMVP() {
 
   const activeRow = useMemo(() => rows.find(r => r.id === activeId) || null, [rows, activeId])
 
-  const startCall = (row: RingeRow) => {
-    setActiveId(row.id)
-    setCallStart(Date.now())
-    setNotat('')
-    setCallbackDato('')
-    setCallTick(0)
-  }
-
-  const cancelCall = () => {
-    setActiveId(null)
-    setCallStart(null)
-    setNotat('')
-    setCallbackDato('')
-  }
-
-  const saveOutcome = async (utfall: Outcome) => {
-    if (!activeRow || !user?.id) return
-    if (utfall === 'callback' && !callbackDato) {
-      alert('Velg en dato/tid for callback')
-      return
-    }
-    setSavingOutcome(utfall)
-    try {
-      const sec = elapsedSec(callStart)
-      const { error: logErr } = await supabase.from('ringelogg').insert({
-        ringeliste_id: activeRow.id,
-        org_nummer: activeRow.orgnr,
-        bedriftsnavn: activeRow.bedriftsnavn,
-        bruker_id: user.id,
-        utfall,
-        notat: notat || null,
-        callback_dato: utfall === 'callback' ? callbackDato : null,
-        varighet_sek: sec || null,
-      })
-      if (logErr) {
-        alert('Kunne ikke lagre ringelogg: ' + logErr.message)
-        return
-      }
-
-      // Update ringeliste.stage based on outcome
-      const stageMap: Record<Outcome, string> = {
-        svar: 'kontaktet',
-        beskjed: 'beskjed_lagt',
-        ikke_svar: 'ny_lead',
-        callback: 'callback',
-        kunde: 'konvertert',
-        ikke_interessert: 'avvist',
-      }
-      const upd: Record<string, unknown> = {
-        stage: stageMap[utfall],
-        sist_kontaktet: new Date().toISOString(),
-      }
-      const { error: updErr } = await supabase.from('ringeliste').update(upd).eq('id', activeRow.id)
-      if (updErr && /sist_kontaktet/i.test(updErr.message)) {
-        await supabase.from('ringeliste').update({ stage: stageMap[utfall] }).eq('id', activeRow.id)
-      }
-
-      // If "ble kunde" → create kundekort and navigate
-      if (utfall === 'kunde') {
-        const ins: Record<string, unknown> = {
-          bedriftsnavn: activeRow.bedriftsnavn,
-          juridisk_navn: activeRow.bedriftsnavn,
-          org_nummer: activeRow.orgnr,
-          sted: activeRow.kommune,
-          kunde_status: 'lead',
-          kilde: 'ringeliste',
-          opprettet_av: user.id,
-          tildelt_bruker_id: user.id,
-        }
-        const { data: kunde } = await supabase.from('kunder').insert(ins).select('id').single()
-        if (kunde?.id) {
-          const ks = (activeRow.kontaktpersoner || []).slice(0, 3).map((k, i) => ({
-            kunde_id: kunde.id,
-            navn: k.navn,
-            tittel: k.rolle,
-            telefon: activeRow.telefon || null,
-            epost: activeRow.epost || null,
-            er_primaer: i === 0,
-          }))
-          if (ks.length > 0) await supabase.from('kontakter').insert(ks)
-          await loadStats()
-          await loadRows()
-          cancelCall()
-          navigate(`/customers/${kunde.id}`)
-          return
-        }
-      }
-
-      await loadStats()
-      await loadRows()
-      cancelCall()
-    } catch (e) {
-      alert('Feil: ' + String(e))
-    } finally {
-      setSavingOutcome(null)
-    }
-  }
-
   const reassignTo = async (row: RingeRow, brukerId: string | null) => {
     await supabase.from('ringeliste').update({ tildelt_bruker_id: brukerId }).eq('id', row.id)
     await loadRows()
@@ -310,7 +249,7 @@ export function RingelisteMVP() {
   const removeFromRingeliste = async (row: RingeRow) => {
     if (!confirm(`Fjerne ${row.bedriftsnavn} fra ringelisten?`)) return
     await supabase.from('ringeliste').delete().eq('id', row.id)
-    if (activeId === row.id) cancelCall()
+    if (activeId === row.id) setActiveId(null)
     await loadRows()
   }
 
@@ -320,9 +259,6 @@ export function RingelisteMVP() {
     return m
   }, [profiles])
 
-  // ─────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────
   return (
     <div className="p-6 space-y-4 min-h-screen bg-slate-50 dark:bg-slate-950">
       {/* Header */}
@@ -344,7 +280,7 @@ export function RingelisteMVP() {
       {/* Stats stripe */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard icon={<Phone className="w-5 h-5" />} label="Samtaler i dag" value={statsToday.totalt} accent="blue" />
-        <StatCard icon={<CheckCircle className="w-5 h-5" />} label="Snakket med (i dag)" value={statsToday.svar} accent="emerald" />
+        <StatCard icon={<CheckCircle className="w-5 h-5" />} label="Med svar (i dag)" value={statsToday.svar} accent="emerald" />
         <StatCard icon={<TrendingUp className="w-5 h-5" />} label="Konverteringer (uke)" value={statsWeek.kunde} accent="amber" />
         <StatCard icon={<BarChart3 className="w-5 h-5" />} label="Totalt (uke)" value={statsWeek.totalt} accent="slate" />
       </div>
@@ -373,67 +309,52 @@ export function RingelisteMVP() {
         />
       </div>
 
-      {/* Split-screen */}
+      {/* Layout: list + slide-in */}
       <div className="grid grid-cols-12 gap-4 min-h-[60vh]">
-        {/* List */}
-        <div className="col-span-7 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200">
-            Neste i køen
+        <div className={activeRow ? 'col-span-7' : 'col-span-12'}>
+          <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200">
+              Neste i køen
+            </div>
+            {loading ? (
+              <div className="p-8 text-center text-sm text-slate-500">Laster…</div>
+            ) : visibleRows.length === 0 ? (
+              <div className="p-8 text-center text-sm text-slate-500">
+                Ingen bedrifter i ringelisten med disse filtrene.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[70vh] overflow-y-auto">
+                {visibleRows.map((row, i) => (
+                  <RingeRowCard
+                    key={row.id}
+                    row={row}
+                    index={i}
+                    active={row.id === activeId}
+                    onSelect={() => setActiveId(row.id)}
+                    onReassign={(uid) => reassignTo(row, uid)}
+                    onRemove={() => removeFromRingeliste(row)}
+                    profiles={profiles}
+                    navnLookup={navnLookup}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-          {loading ? (
-            <div className="p-8 text-center text-sm text-slate-500">Laster…</div>
-          ) : visibleRows.length === 0 ? (
-            <div className="p-8 text-center text-sm text-slate-500">
-              Ingen bedrifter i ringelisten med disse filtrene.
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[70vh] overflow-y-auto">
-              {visibleRows.map((row, i) => (
-                <RingeRowCard
-                  key={row.id}
-                  row={row}
-                  index={i}
-                  active={row.id === activeId}
-                  onCall={() => startCall(row)}
-                  onReassign={(uid) => reassignTo(row, uid)}
-                  onRemove={() => removeFromRingeliste(row)}
-                  profiles={profiles}
-                  navnLookup={navnLookup}
-                />
-              ))}
-            </div>
-          )}
         </div>
 
-        {/* Cockpit */}
-        <div className="col-span-5">
-          {activeRow ? (
-            <CallCockpit
+        {activeRow && (
+          <div className="col-span-5">
+            <CallPanel
               row={activeRow}
-              callStart={callStart}
-              tick={callTick}
-              notat={notat}
-              setNotat={setNotat}
-              callbackDato={callbackDato}
-              setCallbackDato={setCallbackDato}
-              onCancel={cancelCall}
-              onOutcome={saveOutcome}
-              savingOutcome={savingOutcome}
+              userId={user?.id || null}
+              onClose={() => setActiveId(null)}
+              onSaved={async () => { await loadRows(); await loadStats() }}
+              onConverted={(kundeId) => {
+                navigate(`/customers/${kundeId}`)
+              }}
             />
-          ) : (
-            <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 h-full flex items-center justify-center p-8">
-              <div className="text-center max-w-xs">
-                <Phone className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Velg en bedrift fra listen for å starte en samtale.
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">
-                  Når du trykker «Ring», åpnes telefon-app via tel:-link og timer/notat aktiveres her.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -465,15 +386,15 @@ function StatCard({ icon, label, value, accent }: { icon: React.ReactNode; label
 }
 
 // ─────────────────────────────────────────────
-// Row card
+// Row card — viser antall_forsok + siste_ring_dato badge
 // ─────────────────────────────────────────────
 function RingeRowCard({
-  row, index, active, onCall, onReassign, onRemove, profiles, navnLookup
+  row, index, active, onSelect, onReassign, onRemove, profiles, navnLookup
 }: {
   row: RingeRow
   index: number
   active: boolean
-  onCall: () => void
+  onSelect: () => void
   onReassign: (uid: string | null) => void
   onRemove: () => void
   profiles: Profile[]
@@ -491,6 +412,8 @@ function RingeRowCard({
   }, [menuOpen])
 
   const eierNavn = row.tildelt_bruker_id ? navnLookup.get(row.tildelt_bruker_id) || '—' : 'Ikke tildelt'
+  const forsok = row.antall_forsok || 0
+  const sistRel = formatRelative(row.siste_ring_dato)
 
   return (
     <div className={`p-4 transition-colors ${active ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
@@ -523,10 +446,21 @@ function RingeRowCard({
                   )}
                 </div>
               )}
-              <div className="mt-2 flex items-center gap-2 text-xs">
-                <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                  {row.stage || 'ny_lead'}
-                </span>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                {forsok > 0 ? (
+                  <span className={`px-2 py-0.5 rounded font-medium ${forsok >= 3 ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'}`}>
+                    Forsøkt {forsok}{forsok === 1 ? 'x' : ' ganger'}
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                    Ny
+                  </span>
+                )}
+                {sistRel && (
+                  <span className="text-slate-500 dark:text-slate-500 flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Sist ringt {sistRel}
+                  </span>
+                )}
                 <span className="text-slate-500 dark:text-slate-500">
                   Eier: {eierNavn}
                 </span>
@@ -534,10 +468,10 @@ function RingeRowCard({
             </div>
             <div className="flex flex-col items-end gap-1 shrink-0">
               <button
-                onClick={onCall}
+                onClick={onSelect}
                 className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md flex items-center gap-1.5"
               >
-                <PhoneCall className="w-4 h-4" /> Ring
+                <PhoneCall className="w-4 h-4" /> {active ? 'Åpen' : 'Ring'}
               </button>
               <div className="relative" ref={ref}>
                 <button
@@ -585,100 +519,394 @@ function RingeRowCard({
 }
 
 // ─────────────────────────────────────────────
-// Cockpit
+// CallPanel: prep → call → outcome
 // ─────────────────────────────────────────────
-function CallCockpit({
-  row, callStart, tick, notat, setNotat, callbackDato, setCallbackDato, onCancel, onOutcome, savingOutcome
+function CallPanel({
+  row, userId, onClose, onSaved, onConverted
 }: {
   row: RingeRow
-  callStart: number | null
-  tick: number
-  notat: string
-  setNotat: (s: string) => void
-  callbackDato: string
-  setCallbackDato: (s: string) => void
-  onCancel: () => void
-  onOutcome: (u: Outcome) => void
-  savingOutcome: Outcome | null
+  userId: string | null
+  onClose: () => void
+  onSaved: () => Promise<void>
+  onConverted: (kundeId: string) => void
 }) {
-  // tick is included to force re-render every second
-  void tick
+  // Phase: 'prep' → editing kontakter, 'active' → timer running, ready to log outcome
+  const [phase, setPhase] = useState<'prep' | 'active'>('prep')
+  const [callStart, setCallStart] = useState<number | null>(null)
+  const [tick, setTick] = useState(0)
+
+  // Editable contacts + chosen primary
+  const initialContacts: Kontakt[] = useMemo(() => {
+    if (row.kontaktpersoner && row.kontaktpersoner.length > 0) {
+      return row.kontaktpersoner.map(k => ({
+        navn: k.navn || '',
+        rolle: k.rolle || '',
+        telefon: k.telefon || row.telefon || '',
+        epost: k.epost || row.epost || '',
+        fodselsdato: k.fodselsdato,
+      }))
+    }
+    if (row.kontaktperson_navn) {
+      return [{
+        navn: row.kontaktperson_navn,
+        rolle: row.kontaktperson_rolle || '',
+        telefon: row.telefon || '',
+        epost: row.epost || '',
+      }]
+    }
+    return []
+  }, [row.id])
+
+  const [kontakter, setKontakter] = useState<Kontakt[]>(initialContacts)
+  const [valgtIdx, setValgtIdx] = useState<number>(0)
+  const [notat, setNotat] = useState('')
+  const [oppgaveDato, setOppgaveDato] = useState('')
+  const [savingOutcome, setSavingOutcome] = useState<Outcome | null>(null)
+
+  // Reset state when row changes
+  useEffect(() => {
+    setPhase('prep')
+    setCallStart(null)
+    setTick(0)
+    setKontakter(initialContacts)
+    setValgtIdx(0)
+    setNotat('')
+    setOppgaveDato('')
+  }, [row.id])
+
+  // Timer tick
+  useEffect(() => {
+    if (!callStart) return
+    const t = setInterval(() => setTick(x => x + 1), 1000)
+    return () => clearInterval(t)
+  }, [callStart])
+
+  const valgtKontakt = kontakter[valgtIdx]
+
+  const updateKontakt = (idx: number, patch: Partial<Kontakt>) => {
+    setKontakter(prev => prev.map((k, i) => i === idx ? { ...k, ...patch } : k))
+  }
+
+  const addKontakt = () => {
+    setKontakter(prev => [...prev, { navn: '', rolle: '', telefon: row.telefon || '', epost: '' }])
+    setValgtIdx(kontakter.length)
+  }
+
+  const removeKontakt = (idx: number) => {
+    setKontakter(prev => prev.filter((_, i) => i !== idx))
+    if (valgtIdx >= idx && valgtIdx > 0) setValgtIdx(valgtIdx - 1)
+  }
+
+  const persistKontakter = async () => {
+    // Save edited contact list back to ringeliste so info is there next call
+    const top = kontakter[valgtIdx] || kontakter[0]
+    const upd: Record<string, unknown> = {
+      kontaktpersoner: kontakter,
+      kontaktperson_navn: top?.navn || null,
+      kontaktperson_rolle: top?.rolle || null,
+      telefon: top?.telefon || row.telefon || null,
+      epost: top?.epost || row.epost || null,
+    }
+    const { error } = await supabase.from('ringeliste').update(upd).eq('id', row.id)
+    if (error && /column/i.test(error.message)) {
+      // Strip unknown columns and retry
+      const safe: Record<string, unknown> = {}
+      const m = error.message.match(/'([^']+)'/g) || []
+      const blocked = new Set(m.map(s => s.replace(/'/g, '')))
+      Object.entries(upd).forEach(([k, v]) => { if (!blocked.has(k)) safe[k] = v })
+      await supabase.from('ringeliste').update(safe).eq('id', row.id)
+    }
+  }
+
+  const startSamtale = async () => {
+    if (!valgtKontakt || !valgtKontakt.telefon) {
+      if (!confirm('Ingen telefonnummer valgt. Starte samtalen likevel?')) return
+    }
+    await persistKontakter()
+    setCallStart(Date.now())
+    setPhase('active')
+    // Default oppfølgings-dato basert på Snakket med (vanligste utfall)
+    setOppgaveDato(plusDays(7))
+  }
+
+  const cancelCall = () => {
+    setPhase('prep')
+    setCallStart(null)
+    setTick(0)
+  }
+
+  const saveOutcome = async (utfall: Outcome) => {
+    if (!userId) return
+    setSavingOutcome(utfall)
+    try {
+      const sec = elapsedSec(callStart)
+      const callbackForLog = utfall === 'callback' ? oppgaveDato : null
+
+      // 1) ALWAYS log the call event
+      const { error: logErr } = await supabase.from('ringelogg').insert({
+        ringeliste_id: row.id,
+        org_nummer: row.orgnr,
+        bedriftsnavn: row.bedriftsnavn,
+        bruker_id: userId,
+        utfall,
+        notat: notat || null,
+        callback_dato: callbackForLog || null,
+        varighet_sek: sec || null,
+      })
+      if (logErr) {
+        alert('Kunne ikke lagre ringelogg: ' + logErr.message)
+        return
+      }
+
+      // 2) Branch by outcome
+      if (utfall === 'ikke_svar') {
+        // Bump antall_forsok + siste_ring_dato, hold raden i ringelisten
+        const nyForsok = (row.antall_forsok || 0) + 1
+        await supabase.from('ringeliste').update({
+          antall_forsok: nyForsok,
+          siste_ring_dato: new Date().toISOString(),
+          stage: 'ny_lead',
+        }).eq('id', row.id)
+        await onSaved()
+        onClose()
+        return
+      }
+
+      if (utfall === 'ikke_interessert') {
+        await supabase.from('ringeliste').update({
+          stage: 'avvist',
+          siste_ring_dato: new Date().toISOString(),
+        }).eq('id', row.id)
+        await onSaved()
+        onClose()
+        return
+      }
+
+      // KUNDE_OUTCOMES → kundekort + oppgave
+      const ins: Record<string, unknown> = {
+        bedriftsnavn: row.bedriftsnavn,
+        juridisk_navn: row.bedriftsnavn,
+        org_nummer: row.orgnr,
+        sted: row.kommune,
+        kunde_status: utfall === 'kunde' ? 'aktiv' : 'lead',
+        kilde: 'ringeliste',
+        opprettet_av: userId,
+        tildelt_bruker_id: row.tildelt_bruker_id || userId,
+      }
+      const { data: kunde, error: kErr } = await supabase
+        .from('kunder')
+        .insert(ins)
+        .select('id')
+        .single()
+      if (kErr || !kunde?.id) {
+        alert('Kunne ikke opprette kundekort: ' + (kErr?.message || 'ukjent'))
+        return
+      }
+
+      // Insert kontakter
+      if (kontakter.length > 0) {
+        const ks = kontakter.slice(0, 5).map((k, i) => ({
+          kunde_id: kunde.id,
+          navn: k.navn,
+          tittel: k.rolle,
+          telefon: k.telefon || null,
+          epost: k.epost || null,
+          er_primaer: i === valgtIdx,
+        }))
+        await supabase.from('kontakter').insert(ks)
+      }
+
+      // Insert oppgave
+      const oppgaveTittel = (OPPGAVE_TITTEL[utfall] || ((n: string) => `Følg opp ${n}`))(row.bedriftsnavn)
+      const oppgaveBeskrivelse = [
+        `Utfall: ${OUTCOME_LABEL[utfall]}`,
+        valgtKontakt?.navn ? `Snakket med: ${valgtKontakt.navn}` : null,
+        notat || null,
+      ].filter(Boolean).join('\n')
+
+      const oppgaveIns: Record<string, unknown> = {
+        tittel: oppgaveTittel,
+        beskrivelse: oppgaveBeskrivelse,
+        prioritet: utfall === 'mote' || utfall === 'callback' ? 'hoy' : 'normal',
+        status: 'aapen',
+        frist: oppgaveDato ? new Date(oppgaveDato).toISOString() : null,
+        kunde_id: kunde.id,
+        assignee_id: userId,
+        created_by: userId,
+        type: utfall === 'mote' ? 'mote' : utfall === 'callback' ? 'callback' : 'oppfolging',
+        kontekst: { ringeliste_id: row.id, ringelogg_utfall: utfall },
+      }
+      const { error: oppErr } = await supabase.from('oppgaver').insert(oppgaveIns)
+      if (oppErr) {
+        // Try with reduced field set if some columns are missing
+        await supabase.from('oppgaver').insert({
+          tittel: oppgaveTittel,
+          beskrivelse: oppgaveBeskrivelse,
+          status: 'aapen',
+          frist: oppgaveDato ? new Date(oppgaveDato).toISOString() : null,
+          kunde_id: kunde.id,
+          assignee_id: userId,
+        })
+      }
+
+      // Mark ringeliste row as konvertert + link kunde
+      await supabase.from('ringeliste').update({
+        stage: 'konvertert',
+        kunde_id: kunde.id,
+        siste_ring_dato: new Date().toISOString(),
+      }).eq('id', row.id)
+
+      await onSaved()
+
+      if (utfall === 'kunde') {
+        onConverted(kunde.id as string)
+      } else {
+        onClose()
+      }
+    } catch (e) {
+      alert('Feil: ' + String(e))
+    } finally {
+      setSavingOutcome(null)
+    }
+  }
+
   const sec = elapsedSec(callStart)
-  const tel = row.telefon || (row.kontaktpersoner && row.kontaktpersoner.length > 0 ? null : null)
-  const kontakter = row.kontaktpersoner || []
 
-  return (
-    <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 h-full flex flex-col">
-      <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <PhoneCall className="w-4 h-4 text-green-600" />
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Aktiv samtale</span>
-          <span className="text-xs text-slate-500 ml-2 tabular-nums">{formatDuration(sec)}</span>
+  // ─── Render: Prep phase ───
+  if (phase === 'prep') {
+    return (
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 h-full flex flex-col">
+        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Phone className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Forbered samtale</span>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        <button onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
-          Avbryt
-        </button>
-      </div>
 
-      <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-        {/* Company header */}
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{row.bedriftsnavn}</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Org.nr {row.orgnr}
-            {row.bransje_navn && ` • ${row.bransje_navn}`}
-          </p>
-          <div className="flex flex-wrap gap-3 mt-2 text-xs">
-            <a href={`https://w2.brreg.no/enhet/sok/detalj.jsp?orgnr=${row.orgnr}`} target="_blank" rel="noopener noreferrer"
-               className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
-              <ExternalLink className="w-3 h-3" /> Brreg
-            </a>
-            <a href={`https://www.proff.no/bransjes%C3%B8k?q=${row.orgnr}`} target="_blank" rel="noopener noreferrer"
-               className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
-              <ExternalLink className="w-3 h-3" /> Proff
-            </a>
-            {row.hjemmeside && (
-              <a href={row.hjemmeside.startsWith('http') ? row.hjemmeside : `https://${row.hjemmeside}`} target="_blank" rel="noopener noreferrer"
+        <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{row.bedriftsnavn}</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Org.nr {row.orgnr}
+              {row.bransje_navn && ` • ${row.bransje_navn}`}
+            </p>
+            <div className="flex flex-wrap gap-3 mt-2 text-xs">
+              <a href={`https://w2.brreg.no/enhet/sok/detalj.jsp?orgnr=${row.orgnr}`} target="_blank" rel="noopener noreferrer"
                  className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
-                <Globe className="w-3 h-3" /> Hjemmeside
+                <ExternalLink className="w-3 h-3" /> Brreg
               </a>
+              <a href={`https://www.proff.no/bransjes%C3%B8k?q=${row.orgnr}`} target="_blank" rel="noopener noreferrer"
+                 className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+                <ExternalLink className="w-3 h-3" /> Proff
+              </a>
+              {row.hjemmeside && (
+                <a href={row.hjemmeside.startsWith('http') ? row.hjemmeside : `https://${row.hjemmeside}`} target="_blank" rel="noopener noreferrer"
+                   className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+                  <Globe className="w-3 h-3" /> Hjemmeside
+                </a>
+              )}
+            </div>
+          </div>
+
+          {(row.antall_forsok || 0) > 0 && (
+            <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>
+                Forsøkt {row.antall_forsok} {row.antall_forsok === 1 ? 'gang' : 'ganger'} tidligere
+                {row.siste_ring_dato && ` — sist ${formatRelative(row.siste_ring_dato)}`}.
+              </span>
+            </div>
+          )}
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Kontakter — velg hvem du ringer</p>
+              <button
+                onClick={addKontakt}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" /> Legg til
+              </button>
+            </div>
+            {kontakter.length === 0 ? (
+              <div className="text-xs text-slate-500 dark:text-slate-400 italic px-3 py-4 border border-dashed border-slate-300 dark:border-slate-700 rounded-md text-center">
+                Ingen kontakter registrert. Legg til en for å fortsette.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {kontakter.map((k, i) => (
+                  <KontaktEditor
+                    key={i}
+                    kontakt={k}
+                    selected={i === valgtIdx}
+                    onSelect={() => setValgtIdx(i)}
+                    onChange={(patch) => updateKontakt(i, patch)}
+                    onRemove={kontakter.length > 1 ? () => removeKontakt(i) : undefined}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </div>
 
-        {/* Contacts */}
-        {kontakter.length > 0 && (
-          <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1.5">Kontakter</p>
-            <div className="space-y-1.5">
-              {kontakter.slice(0, 4).map((k, i) => (
-                <div key={i} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-slate-50 dark:bg-slate-800">
-                  <div className="min-w-0">
-                    <p className="text-sm text-slate-800 dark:text-slate-100 truncate">{k.navn}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{k.rolle}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="border-t border-slate-200 dark:border-slate-800 p-3">
+          <button
+            onClick={startSamtale}
+            disabled={kontakter.length === 0}
+            className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium flex items-center justify-center gap-2"
+          >
+            <PhoneCall className="w-4 h-4" /> Start samtale
+            {valgtKontakt?.telefon && (
+              <span className="text-xs opacity-90">— {formatTel(valgtKontakt.telefon)}</span>
+            )}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
-        {/* Phone */}
-        {tel && (
+  // ─── Render: Active call phase ───
+  return (
+    <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 h-full flex flex-col">
+      <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <PhoneCall className="w-4 h-4 text-green-600 animate-pulse" />
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Aktiv samtale</span>
+          <span className="text-xs text-slate-500 ml-2 tabular-nums">{formatDuration(sec)}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={cancelCall} className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+            ← Tilbake
+          </button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white">{row.bedriftsnavn}</h2>
+          {valgtKontakt && (
+            <p className="text-sm text-slate-700 dark:text-slate-300 mt-0.5">
+              {valgtKontakt.navn}
+              {valgtKontakt.rolle && <span className="text-slate-500 dark:text-slate-400"> — {valgtKontakt.rolle}</span>}
+            </p>
+          )}
+        </div>
+
+        {valgtKontakt?.telefon && (
           <a
-            href={telHref(tel)}
+            href={telHref(valgtKontakt.telefon)}
             className="block w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white text-center rounded-lg font-medium flex items-center justify-center gap-2"
           >
-            <Phone className="w-4 h-4" /> {formatTel(tel)}
+            <Phone className="w-4 h-4" /> {formatTel(valgtKontakt.telefon)}
           </a>
         )}
-        {!tel && (
-          <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded px-3 py-2">
-            Ingen telefonnummer registrert. Slå opp via Brreg/Proff lenkene over.
-          </div>
-        )}
 
-        {/* Notes */}
         <div>
           <label className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1.5 block">Notat</label>
           <textarea
@@ -690,32 +918,112 @@ function CallCockpit({
           />
         </div>
 
-        {/* Callback date */}
         <div>
           <label className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1.5 block flex items-center gap-1">
-            <Calendar className="w-3 h-3" /> Callback (valgfritt)
+            <Calendar className="w-3 h-3" /> Frist for oppfølgings-oppgave
           </label>
           <input
             type="datetime-local"
-            value={callbackDato}
-            onChange={e => setCallbackDato(e.target.value)}
+            value={oppgaveDato}
+            onChange={e => setOppgaveDato(e.target.value)}
             className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-slate-800 dark:text-slate-100"
           />
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {[1, 3, 7, 14, 30].map(d => (
+              <button
+                key={d}
+                onClick={() => setOppgaveDato(plusDays(d))}
+                type="button"
+                className="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+              >
+                +{d}d
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Brukes kun ved Snakket / Møte / Callback / Ble kunde
+          </p>
         </div>
       </div>
 
-      {/* Outcome buttons */}
       <div className="border-t border-slate-200 dark:border-slate-800 p-3 grid grid-cols-2 gap-2">
         {(Object.keys(OUTCOME_LABEL) as Outcome[]).map(u => (
           <button
             key={u}
-            onClick={() => onOutcome(u)}
+            onClick={() => saveOutcome(u)}
             disabled={savingOutcome !== null}
             className={`px-3 py-2 text-white text-sm rounded-md font-medium transition-opacity disabled:opacity-50 ${OUTCOME_COLOR[u]}`}
           >
             {savingOutcome === u ? 'Lagrer…' : OUTCOME_LABEL[u]}
           </button>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function KontaktEditor({
+  kontakt, selected, onSelect, onChange, onRemove
+}: {
+  kontakt: Kontakt
+  selected: boolean
+  onSelect: () => void
+  onChange: (patch: Partial<Kontakt>) => void
+  onRemove?: () => void
+}) {
+  return (
+    <div className={`rounded-md border p-3 space-y-2 cursor-pointer transition-colors ${selected
+      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-500'
+      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}
+         onClick={onSelect}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <input
+            type="radio"
+            checked={selected}
+            onChange={onSelect}
+            className="text-blue-600"
+          />
+          <div className="text-xs font-medium text-slate-700 dark:text-slate-200">
+            {selected ? 'Valgt' : 'Velg'}
+          </div>
+        </div>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRemove() }}
+            className="text-slate-400 hover:text-rose-600"
+            title="Fjern kontakt"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2" onClick={e => e.stopPropagation()}>
+        <input
+          value={kontakt.navn}
+          onChange={e => onChange({ navn: e.target.value })}
+          placeholder="Navn"
+          className="px-2 py-1 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-800 dark:text-slate-100"
+        />
+        <input
+          value={kontakt.rolle}
+          onChange={e => onChange({ rolle: e.target.value })}
+          placeholder="Rolle / tittel"
+          className="px-2 py-1 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-800 dark:text-slate-100"
+        />
+        <input
+          value={kontakt.telefon || ''}
+          onChange={e => onChange({ telefon: e.target.value })}
+          placeholder="Telefon"
+          className="px-2 py-1 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-800 dark:text-slate-100"
+        />
+        <input
+          value={kontakt.epost || ''}
+          onChange={e => onChange({ epost: e.target.value })}
+          placeholder="E-post"
+          className="px-2 py-1 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-800 dark:text-slate-100"
+        />
       </div>
     </div>
   )
