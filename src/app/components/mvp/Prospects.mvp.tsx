@@ -948,6 +948,8 @@ function ProspektSok() {
     setBrregTotalPages(0)
     setSelected(new Set())
     setHasSearched(true)
+    loadingMoreRef.current = false
+    setLoadingMore(false)
     setAppliedHarHjemmeside(harHjemmeside)
     setAppliedHarTelefon(harTelefon)
     setAppliedHarEpost(harEpost)
@@ -1047,11 +1049,17 @@ function ProspektSok() {
 
   // Auto-fetch more Brreg pages when we don't have enough buffered items for
   // the current logical page (with or without contact filter). Each fetch
-  // grabs BRREG_FETCH_SIZE records in one round trip — no more sequential
-  // small fetches.
+  // grabs BRREG_FETCH_SIZE records in one round trip.
+  //
+  // We gate concurrent fetches via `loadingMoreRef.current`, NOT via the
+  // `loadingMore` state, because including the state in the dependency array
+  // makes React re-run the effect when we set it true — which would invoke
+  // the cleanup function and cancel our own in-flight fetch.
+  const loadingMoreRef = useRef(false)
   useEffect(() => {
     if (!hasSearched) return
-    if (loading || loadingMore) return
+    if (loading) return
+    if (loadingMoreRef.current) return
     if (brregNextPage >= brregTotalPages) return
     if (brregNextPage >= fetchCap) return
 
@@ -1061,12 +1069,11 @@ function ProspektSok() {
       : buffer.length >= needed
     if (haveEnough) return
 
-    let cancelled = false
+    loadingMoreRef.current = true
     setLoadingMore(true)
     ;(async () => {
       try {
         const res = await searchBrreg({ ...paramsRef.current, page: brregNextPage, size: BRREG_FETCH_SIZE })
-        if (cancelled) return
         setBuffer(prev => [...prev, ...res.items])
         setBrregNextPage(prev => prev + 1)
         // Keep brregTotal/totalPages in sync if Brreg shifts (shouldn't, but safe):
@@ -1075,11 +1082,11 @@ function ProspektSok() {
       } catch {
         // network blip — user can retry by clicking next page or "Last flere"
       } finally {
-        if (!cancelled) setLoadingMore(false)
+        loadingMoreRef.current = false
+        setLoadingMore(false)
       }
     })()
-    return () => { cancelled = true }
-  }, [hasSearched, hasContactFilter, page, pageSize, filteredItems.length, buffer.length, brregNextPage, brregTotalPages, loading, loadingMore, brregTotal, fetchCap])
+  }, [hasSearched, hasContactFilter, page, pageSize, filteredItems.length, buffer.length, brregNextPage, brregTotalPages, loading, brregTotal, fetchCap])
 
   // Page navigation. The buffer is contiguous (no padding), so just moving the
   // logical page is enough — the auto-fetch effect tops up the buffer when
