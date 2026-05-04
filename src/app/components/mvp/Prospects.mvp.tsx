@@ -366,19 +366,28 @@ function getFylke(nr: string) {
   return FYLKE_NAVN[nr.slice(0, 2)] || `Fylke ${nr.slice(0, 2)}`
 }
 
-let _kommunerCache: { nr: string; navn: string }[] | null = null
+// Cache: { fylkenavn → Kommune[] }
+let _grupperCache: { kode: string; navn: string; kommuner: { nr: string; navn: string }[] }[] | null = null
 
-async function loadKommuner() {
-  if (_kommunerCache) return _kommunerCache
+async function loadGrupperFromSupabase() {
+  if (_grupperCache) return _grupperCache
   try {
-    const resp = await fetch('https://data.brreg.no/enhetsregisteret/api/kommuner', {
-      headers: { Accept: 'application/json' }
-    })
-    const data = await resp.json()
-    _kommunerCache = (data._embedded?.kommuner || [])
-      .map((k: any) => ({ nr: k.nummer, navn: k.navn }))
-      .sort((a: any, b: any) => a.navn.localeCompare(b.navn, 'nb'))
-    return _kommunerCache
+    const [fylkerResp, kommunerResp] = await Promise.all([
+      supabase.from('brreg_fylker').select('nr, navn, sortering').order('sortering'),
+      supabase.from('brreg_kommuner').select('nr, navn, fylke_nr').order('navn'),
+    ])
+    const fylker = fylkerResp.data || []
+    const kommuner = kommunerResp.data || []
+
+    _grupperCache = fylker.map((f: any) => ({
+      kode: f.nr,
+      navn: f.navn,
+      kommuner: kommuner
+        .filter((k: any) => k.fylke_nr === f.nr)
+        .map((k: any) => ({ nr: k.nr, navn: k.navn }))
+    })).filter((g: any) => g.kommuner.length > 0)
+
+    return _grupperCache
   } catch { return [] }
 }
 
@@ -391,11 +400,14 @@ function KommuneCombobox({
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [kommuner, setKommuner] = useState<{ nr: string; navn: string }[]>([])
+  const [grupper, setGrupper] = useState<{ kode: string; navn: string; kommuner: { nr: string; navn: string }[] }[]>([])
   const [collapsedFylker, setCollapsedFylker] = useState<Set<string>>(new Set())
   const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { loadKommuner().then(setKommuner) }, [])
+  useEffect(() => { loadGrupperFromSupabase().then(setGrupper) }, [])
+
+  // Flat list of all communes for search + name lookup
+  const alleKommuner = grupper.flatMap(g => g.kommuner)
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -424,41 +436,16 @@ function KommuneCombobox({
     })
   }
 
-  // Build groups: group all communes by fylkenavn (merge old+new codes for same county)
-  const grouped = (() => {
-    const byNavn: Record<string, { kode: string; kommuner: { nr: string; navn: string }[] }> = {}
-    kommuner.forEach(k => {
-      const kode = k.nr.slice(0, 2)
-      const navn = FYLKE_NAVN[kode] || `Fylke ${kode}`
-      if (!byNavn[navn]) byNavn[navn] = { kode, kommuner: [] }
-      byNavn[navn].kommuner.push(k)
-    })
-    // Sort by FYLKE_ORDER using the first occurrence of the fylkenavn
-    const navnOrder = FYLKE_ORDER.map(k => FYLKE_NAVN[k]).filter(Boolean)
-    const uniqueNavnOrder = [...new Set(navnOrder)]
-    return Object.entries(byNavn)
-      .map(([navn, { kode, kommuner: koms }]) => ({
-        kode,
-        navn,
-        kommuner: koms.sort((a, b) => a.navn.localeCompare(b.navn, 'nb'))
-      }))
-      .sort((a, b) => {
-        const ai = uniqueNavnOrder.indexOf(a.navn)
-        const bi = uniqueNavnOrder.indexOf(b.navn)
-        if (ai === -1 && bi === -1) return a.navn.localeCompare(b.navn, 'nb')
-        if (ai === -1) return 1
-        if (bi === -1) return -1
-        return ai - bi
-      })
-  })()
+  // Use grupper directly (already sorted from Supabase by sortering)
+  const grouped = grupper
 
   // Searching: flat list across all fylker
   const isSearching = query.trim().length > 0
-  const searchResults = kommuner.filter(k =>
+  const searchResults = alleKommuner.filter(k =>
     k.navn.toLowerCase().includes(query.toLowerCase()) || k.nr.includes(query)
   )
 
-  const selectedNames = selected.map(nr => kommuner.find(k => k.nr === nr)?.navn || nr)
+  const selectedNames = selected.map(nr => alleKommuner.find(k => k.nr === nr)?.navn || nr)
   const selectedCount = selected.length
 
   const CheckBox = ({ checked, partial }: { checked: boolean; partial?: boolean }) => (
@@ -517,7 +504,7 @@ function KommuneCombobox({
           )}
 
           <div className="overflow-y-auto flex-1">
-            {kommuner.length === 0 ? (
+            {grupper.length === 0 ? (
               <div className="px-3 py-4 text-xs text-slate-400 text-center">Laster kommuner...</div>
             ) : isSearching ? (
               // Flat search results
