@@ -459,9 +459,20 @@ function BransjeCombobox({
         className="w-full flex items-center justify-between px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-left hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
       >
         <span className="text-slate-600 dark:text-slate-300 truncate">
-          {selected.length === 0 ? 'Alle bransjer' : `${selected.length} valgt`}
+          {selected.length === 0
+            ? 'Alle bransjer'
+            : selected.length === 1
+              ? selectedNames[0]
+              : `${selected.length} bransjer valgt`}
         </span>
-        <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0 ml-1" />
+        <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
+          {selected.length > 0 && (
+            <span className="bg-blue-600 text-white text-xs font-medium rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+              {selected.length}
+            </span>
+          )}
+          <ChevronDown className="w-4 h-4 text-slate-400" />
+        </div>
       </button>
 
       {selected.length > 0 && (
@@ -696,10 +707,10 @@ function KommuneCombobox({
            selectedCount === 1 ? selectedNames[0] :
            `${selectedCount} kommuner valgt`}
         </span>
-        <div className="flex items-center gap-1 flex-shrink-0 ml-1">
+        <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
           {selectedCount > 0 && (
-            <span className="bg-blue-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-              {selectedCount > 9 ? '9+' : selectedCount}
+            <span className="bg-blue-600 text-white text-xs font-medium rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+              {selectedCount}
             </span>
           )}
           <ChevronDown className="w-4 h-4 text-slate-400" />
