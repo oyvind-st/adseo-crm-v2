@@ -82,6 +82,7 @@ async function loadBransjerFromSupabase(): Promise<BransjerData> {
       .from('brreg_naeringskoder')
       .select('kode, parent_kode, level, navn')
       .order('kode')
+      .range(0, 2999)  // PostgREST default cap is 1000; full NACE catalog is 1811 rows.
     if (error || !data) return { grupper: [], alleKoder: [] }
 
     // Build section (level 1) and division (level 2) lookups
