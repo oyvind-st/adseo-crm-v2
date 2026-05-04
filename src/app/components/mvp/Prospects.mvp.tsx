@@ -1164,7 +1164,7 @@ function ResultRow({
   return (
     <tr
       onClick={onRowClick}
-      className={`border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors cursor-pointer ${
+      className={`border-b border-slate-100 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer ${
         checked ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-l-blue-500' : ''
       }`}
     >
@@ -1792,7 +1792,7 @@ function ProspektSok() {
 
         {/* Bulk action bar */}
         {hasSearched && (
-          <div className="px-4 py-2.5 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+          <div className="px-4 py-2.5 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-400">
                 <input
@@ -1828,7 +1828,7 @@ function ProspektSok() {
         )}
 
         {/* Table */}
-        <div className="flex-1 overflow-auto bg-white dark:bg-slate-800">
+        <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-900">
           {loading && (
             <div className="flex items-center justify-center h-48 gap-3">
               <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
@@ -1874,7 +1874,7 @@ function ProspektSok() {
           {!loading && hasSearched && displayItems.length > 0 && (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 sticky top-0">
+                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 sticky top-0">
                   <th className="pl-4 pr-2 py-3 w-10" />
                   <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
                     Bedriftsnavn
@@ -1896,7 +1896,7 @@ function ProspektSok() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+              <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-100 dark:divide-slate-700/50">
                 {displayItems.map(company => (
                   <ResultRow
                     key={company.orgnr}
@@ -2414,7 +2414,7 @@ function NyregistrerteTab() {
       {/* Main panel */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Bulk action bar */}
-        <div className="px-4 py-2.5 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <div className="px-4 py-2.5 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-400">
               <input
@@ -2441,7 +2441,7 @@ function NyregistrerteTab() {
         </div>
 
         {/* Table */}
-        <div className="flex-1 overflow-auto bg-white dark:bg-slate-800">
+        <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-900">
         {loading ? (
           <div className="flex items-center justify-center h-40 gap-3">
             <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
@@ -2469,7 +2469,7 @@ function NyregistrerteTab() {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+            <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-100 dark:divide-slate-700/50">
               {rows.map(row => {
                 const checked = selected.has(row.orgnr)
                 const inRL = ringeliste.has(row.orgnr)
@@ -2478,7 +2478,7 @@ function NyregistrerteTab() {
                   <tr
                     key={row.orgnr}
                     onClick={() => setSelectedOrgnr(row.orgnr)}
-                    className={`hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors cursor-pointer ${
+                    className={`hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer ${
                       checked ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-l-blue-500' : ''
                     }`}
                   >
@@ -2668,7 +2668,7 @@ export function ProspectsMVP() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-950">
+      <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-900">
         {activeTab === 'sok' && <ProspektSok />}
         {activeTab === 'nyregistrerte' && <NyregistrerteTab />}
       </div>
