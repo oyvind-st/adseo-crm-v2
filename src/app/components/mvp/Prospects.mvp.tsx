@@ -56,6 +56,7 @@ interface SearchParams {
   harTelefon?: boolean
   harEpost?: boolean
   page?: number
+  size?: number
 }
 
 // ─────────────────────────────────────────────
@@ -178,7 +179,7 @@ async function searchBrreg(params: SearchParams): Promise<BrregResult> {
   if (params.foretaksReg) url.searchParams.set('registrertIForetaksregisteret', 'true')
   url.searchParams.set('konkurs', 'false')
   url.searchParams.set('underAvvikling', 'false')
-  url.searchParams.set('size', '20')
+  url.searchParams.set('size', String(params.size || 20))
   url.searchParams.set('page', String(params.page || 0))
   url.searchParams.set('sort', 'navn,asc')
 
@@ -859,10 +860,20 @@ function ProspektSok() {
   const [harTelefon, setHarTelefon] = useState(false)
   const [harEpost, setHarEpost] = useState(false)
 
-  // Results
-  const [result, setResult] = useState<BrregResult | null>(null)
-  const [loading, setLoading] = useState(false)
+  // Pagination (logical — across filtered results)
+  const [pageSize, setPageSize] = useState(20)
   const [page, setPage] = useState(0)
+
+  // Result accumulator (across multiple Brreg pages, used when contact filters require over-fetching)
+  const [buffer, setBuffer] = useState<Company[]>([])
+  const [brregNextPage, setBrregNextPage] = useState(0)
+  const [brregTotal, setBrregTotal] = useState(0)
+  const [brregTotalPages, setBrregTotalPages] = useState(0)
+  const [hasSearched, setHasSearched] = useState(false)
+
+  // Loading + error
+  const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
 
   // Selection
@@ -886,43 +897,57 @@ function ProspektSok() {
     })
   }, [])
 
-  const doSearch = useCallback(async (pg: number) => {
+  // Build current search params (without page/size)
+  const buildBaseParams = useCallback((): SearchParams => ({
+    navn: searchName || undefined,
+    naeringskoder: bransjer.length ? bransjer : undefined,
+    organisasjonsformer: orgFormer.length ? orgFormer : undefined,
+    kommunenummer: kommuner.length ? kommuner : undefined,
+    fraAnsatte: fraAnsatte ? Number(fraAnsatte) : undefined,
+    tilAnsatte: tilAnsatte ? Number(tilAnsatte) : undefined,
+    fraRegistrert: fraRegDato || undefined,
+    tilRegistrert: tilRegDato || undefined,
+    mvaRegistrert: mvaRegistrert || undefined,
+    foretaksReg: foretaksReg || undefined,
+  }), [searchName, bransjer, orgFormer, kommuner, fraAnsatte, tilAnsatte, fraRegDato, tilRegDato, mvaRegistrert, foretaksReg])
+
+  // Keep latest params accessible to fetch loops without forcing useEffect re-runs
+  const paramsRef = useRef<SearchParams>(buildBaseParams())
+  paramsRef.current = buildBaseParams()
+
+  // Reset and re-fetch from Brreg page 0
+  const doSearch = useCallback(async (sizeOverride?: number) => {
+    const size = sizeOverride ?? pageSize
     setLoading(true)
     setError('')
+    setBuffer([])
+    setPage(0)
+    setBrregNextPage(0)
+    setBrregTotal(0)
+    setBrregTotalPages(0)
+    setSelected(new Set())
+    setHasSearched(true)
     try {
-      const params: SearchParams = {
-        navn: searchName || undefined,
-        naeringskoder: bransjer.length ? bransjer : undefined,
-        organisasjonsformer: orgFormer.length ? orgFormer : undefined,
-        kommunenummer: kommuner.length ? kommuner : undefined,
-        fraAnsatte: fraAnsatte ? Number(fraAnsatte) : undefined,
-        tilAnsatte: tilAnsatte ? Number(tilAnsatte) : undefined,
-        fraRegistrert: fraRegDato || undefined,
-        tilRegistrert: tilRegDato || undefined,
-        mvaRegistrert: mvaRegistrert || undefined,
-        foretaksReg: foretaksReg || undefined,
-        page: pg,
-      }
-      const res = await searchBrreg(params)
-      setResult(res)
-      setPage(pg)
-      setSelected(new Set())
+      const res = await searchBrreg({ ...paramsRef.current, page: 0, size })
+      setBuffer(res.items)
+      setBrregTotal(res.total)
+      setBrregTotalPages(res.totalPages)
+      setBrregNextPage(1)
     } catch {
       setError('Klarte ikke hente data fra Brreg. Prøv igjen.')
     } finally {
       setLoading(false)
     }
-  }, [searchName, bransjer, orgFormer, kommuner, fraAnsatte, tilAnsatte, fraRegDato, tilRegDato, mvaRegistrert, foretaksReg])
+  }, [pageSize])
 
   const handleSearch = () => {
     setSearchName(searchInput)
-    setPage(0)
   }
 
-  // Re-search when searchName changes
+  // Re-search when searchName changes (after Enter / Søk button)
   useEffect(() => {
     if (searchName !== '' || bransjer.length || orgFormer.length || kommuner.length) {
-      doSearch(0)
+      doSearch()
     }
   }, [searchName]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -941,13 +966,114 @@ function ProspektSok() {
     setHarEpost(false)
   }
 
-  // Client-side post-filter for contact info
-  const displayItems = (result?.items || []).filter(c => {
+  // Client-side post-filter for contact info — applied to ALL accumulated items
+  const hasContactFilter = harHjemmeside || harTelefon || harEpost
+
+  const filteredItems = buffer.filter(c => {
     if (harHjemmeside && !c.hjemmeside) return false
     if (harTelefon && !c.telefon && !c.mobil) return false
     if (harEpost && !c.epost) return false
     return true
   })
+
+  const exhausted = hasSearched && brregNextPage >= brregTotalPages
+
+  // What we display: the slice of filtered items for the current logical page
+  const displayItems = filteredItems.slice(page * pageSize, (page + 1) * pageSize)
+
+  // Total count + total pages
+  // - No contact filter: trust Brreg's totals directly
+  // - Contact filter on, exhausted: filteredItems.length is the real total
+  // - Contact filter on, not exhausted: we don't know the true total; keep showing "+1" page until exhausted
+  const totalCount = hasContactFilter ? filteredItems.length : brregTotal
+  const totalPages = hasContactFilter
+    ? (exhausted
+        ? Math.max(1, Math.ceil(filteredItems.length / pageSize))
+        : Math.max(page + 2, Math.ceil(filteredItems.length / pageSize) + 1))
+    : Math.max(1, Math.ceil(brregTotal / pageSize))
+
+  // Auto-fetch more Brreg pages when contact filter is on and we don't have enough filtered items
+  // for the current logical page (or one extra to allow forward navigation).
+  useEffect(() => {
+    if (!hasSearched) return
+    if (loading || loadingMore) return
+    if (brregNextPage >= brregTotalPages) return
+
+    // We only over-fetch when contact filters demand it. Without contact filters,
+    // a Brreg page maps 1:1 to a logical page, so we fetch on demand from goToPage().
+    if (!hasContactFilter) return
+
+    const needed = (page + 2) * pageSize  // current page + one extra so "Next" is responsive
+    if (filteredItems.length >= needed) return
+
+    let cancelled = false
+    setLoadingMore(true)
+    ;(async () => {
+      try {
+        const res = await searchBrreg({ ...paramsRef.current, page: brregNextPage, size: pageSize })
+        if (cancelled) return
+        setBuffer(prev => [...prev, ...res.items])
+        setBrregNextPage(prev => prev + 1)
+        // Keep brregTotal/totalPages in sync if Brreg shifts (shouldn't, but safe):
+        if (res.totalPages !== brregTotalPages) setBrregTotalPages(res.totalPages)
+        if (res.total !== brregTotal) setBrregTotal(res.total)
+      } catch {
+        // network blip — leave loadingMore false; user can retry by paging
+      } finally {
+        if (!cancelled) setLoadingMore(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [hasSearched, hasContactFilter, page, pageSize, filteredItems.length, brregNextPage, brregTotalPages, loading, loadingMore, brregTotal])
+
+  // Page navigation. Without contact filters we can fetch the matching Brreg page on demand.
+  const goToPage = useCallback(async (newPage: number) => {
+    const target = Math.max(0, newPage)
+    setSelected(new Set())
+
+    if (hasContactFilter) {
+      // Just move the logical page; the auto-fetch effect tops up the buffer if needed
+      setPage(target)
+      return
+    }
+
+    // No contact filter: each logical page maps directly to a Brreg page
+    const haveTo = brregNextPage * pageSize  // we have items up to (but not including) this offset
+    const wantTo = (target + 1) * pageSize
+
+    if (haveTo >= wantTo || target * pageSize < buffer.length) {
+      setPage(target)
+      return
+    }
+
+    // Need to fetch the next Brreg page for this target
+    setLoading(true)
+    setError('')
+    try {
+      const res = await searchBrreg({ ...paramsRef.current, page: target, size: pageSize })
+      // Replace buffer with this page's items (we don't need to keep older pages in memory
+      // when there's no contact filter — the user navigates page-by-page).
+      // Keep buffer aligned to start at offset target*pageSize:
+      setBuffer(prev => {
+        // Pad the front so that slice(target*pageSize, ...) maps correctly
+        const padded: Company[] = new Array(target * pageSize).fill(null as any)
+        return [...padded, ...res.items]
+      })
+      setBrregNextPage(target + 1)
+      setBrregTotal(res.total)
+      setBrregTotalPages(res.totalPages)
+      setPage(target)
+    } catch {
+      setError('Klarte ikke hente data fra Brreg. Prøv igjen.')
+    } finally {
+      setLoading(false)
+    }
+  }, [hasContactFilter, brregNextPage, pageSize, buffer.length])
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize)
+    if (hasSearched) doSearch(newSize)
+  }
 
   const addToRingeliste = async (company: Company) => {
     setAdding(prev => new Set([...prev, company.orgnr]))
@@ -984,8 +1110,7 @@ function ProspektSok() {
   }
 
   const addBulkToRingeliste = async () => {
-    if (!result) return
-    const companies = result.items.filter(c => selected.has(c.orgnr) && !ringeliste.has(c.orgnr) && !kunder.has(c.orgnr))
+    const companies = displayItems.filter(c => selected.has(c.orgnr) && !ringeliste.has(c.orgnr) && !kunder.has(c.orgnr))
     for (const company of companies) {
       await addToRingeliste(company)
     }
@@ -993,8 +1118,8 @@ function ProspektSok() {
   }
 
   const toggleAll = () => {
-    if (!result) return
-    const allOrgnr = result.items.map(c => c.orgnr)
+    if (displayItems.length === 0) return
+    const allOrgnr = displayItems.map(c => c.orgnr)
     const allSelected = allOrgnr.every(o => selected.has(o))
     if (allSelected) {
       setSelected(new Set())
@@ -1003,8 +1128,8 @@ function ProspektSok() {
     }
   }
 
-  const newToRingeliste = selected.size > 0 && result
-    ? result.items.filter(c => selected.has(c.orgnr) && !ringeliste.has(c.orgnr) && !kunder.has(c.orgnr)).length
+  const newToRingeliste = selected.size > 0
+    ? displayItems.filter(c => selected.has(c.orgnr) && !ringeliste.has(c.orgnr) && !kunder.has(c.orgnr)).length
     : 0
 
   return (
@@ -1157,12 +1282,14 @@ function ProspektSok() {
               </label>
             ))}
           </div>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">Filtreres lokalt etter søk</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
+            Filtreres etter henting fra Brreg — vi henter flere sider automatisk ved behov
+          </p>
         </div>
 
         {/* Apply button */}
         <button
-          onClick={() => doSearch(0)}
+          onClick={() => doSearch()}
           className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
         >
           <Search className="w-4 h-4" />
@@ -1194,21 +1321,29 @@ function ProspektSok() {
         </div>
 
         {/* Bulk action bar */}
-        {result && (
+        {hasSearched && (
           <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-400">
                 <input
                   type="checkbox"
                   onChange={toggleAll}
-                  checked={result.items.length > 0 && result.items.every(c => selected.has(c.orgnr))}
+                  checked={displayItems.length > 0 && displayItems.every(c => selected.has(c.orgnr))}
                   className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
-                Velg alle
+                Velg alle på siden
               </label>
               <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-full px-2 text-xs font-medium py-0.5">
-                {result.total.toLocaleString('nb')} treff
+                {hasContactFilter && !exhausted
+                  ? `${totalCount.toLocaleString('nb')}+ treff (filtrerer…)`
+                  : `${totalCount.toLocaleString('nb')} treff${hasContactFilter ? ` (av ${brregTotal.toLocaleString('nb')})` : ''}`}
               </span>
+              {loadingMore && (
+                <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  <div className="w-3 h-3 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                  Henter flere…
+                </span>
+              )}
             </div>
             {selected.size > 0 && (
               <button
@@ -1237,7 +1372,7 @@ function ProspektSok() {
             </div>
           )}
 
-          {!loading && !error && !result && (
+          {!loading && !error && !hasSearched && (
             <div className="flex flex-col items-center justify-center h-48 text-center">
               <Building2 className="w-10 h-10 text-slate-300 dark:text-slate-600 mb-3" />
               <p className="text-slate-500 dark:text-slate-400 text-sm">
@@ -1246,14 +1381,27 @@ function ProspektSok() {
             </div>
           )}
 
-          {!loading && result && result.items.length === 0 && (
+          {!loading && hasSearched && displayItems.length === 0 && exhausted && (
             <div className="flex flex-col items-center justify-center h-48 text-center">
               <Search className="w-10 h-10 text-slate-300 dark:text-slate-600 mb-3" />
-              <p className="text-slate-500 dark:text-slate-400 text-sm">Ingen resultater for dette søket</p>
+              <p className="text-slate-500 dark:text-slate-400 text-sm">
+                {hasContactFilter
+                  ? 'Ingen treff matcher kontaktinfo-filteret'
+                  : 'Ingen resultater for dette søket'}
+              </p>
             </div>
           )}
 
-          {!loading && result && result.items.length > 0 && (
+          {!loading && hasSearched && displayItems.length === 0 && !exhausted && loadingMore && (
+            <div className="flex items-center justify-center h-48 gap-3">
+              <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+              <span className="text-sm text-slate-500 dark:text-slate-400">
+                Filtrerer treff med kontaktinfo…
+              </span>
+            </div>
+          )}
+
+          {!loading && hasSearched && displayItems.length > 0 && (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 sticky top-0">
@@ -1305,42 +1453,66 @@ function ProspektSok() {
         </div>
 
         {/* Pagination */}
-        {result && result.totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800">
+        {hasSearched && totalCount > 0 && (
+          <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800 flex-wrap gap-3">
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              Side {page + 1} av {result.totalPages} · {result.total.toLocaleString('nb')} treff
+              Side {page + 1}
+              {hasContactFilter && !exhausted ? ' av ?' : ` av ${Math.max(1, Math.ceil(totalCount / pageSize))}`}
+              {' · '}
+              {hasContactFilter && !exhausted
+                ? `${totalCount.toLocaleString('nb')}+ treff`
+                : `${totalCount.toLocaleString('nb')} treff`}
             </span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => doSearch(page - 1)}
-                disabled={page === 0}
-                className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              {Array.from({ length: Math.min(7, result.totalPages) }, (_, i) => {
-                const pg = Math.max(0, Math.min(result.totalPages - 7, page - 3)) + i
-                return (
-                  <button
-                    key={pg}
-                    onClick={() => doSearch(pg)}
-                    className={`w-8 h-8 text-xs rounded border transition-colors ${
-                      pg === page
-                        ? 'bg-blue-600 border-blue-600 text-white font-semibold'
-                        : 'border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    {pg + 1}
-                  </button>
-                )
-              })}
-              <button
-                onClick={() => doSearch(page + 1)}
-                disabled={page >= result.totalPages - 1}
-                className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+            <div className="flex items-center gap-3">
+              {/* Page size selector */}
+              <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                <span>Per side:</span>
+                <select
+                  value={pageSize}
+                  onChange={e => handlePageSizeChange(Number(e.target.value))}
+                  className="px-2 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                </select>
+              </label>
+
+              {/* Page buttons */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => goToPage(page - 1)}
+                  disabled={page === 0 || loading}
+                  className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+                  const pg = Math.max(0, Math.min(totalPages - 7, page - 3)) + i
+                  return (
+                    <button
+                      key={pg}
+                      onClick={() => goToPage(pg)}
+                      disabled={loading}
+                      className={`w-8 h-8 text-xs rounded border transition-colors ${
+                        pg === page
+                          ? 'bg-blue-600 border-blue-600 text-white font-semibold'
+                          : 'border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40'
+                      }`}
+                    >
+                      {pg + 1}
+                    </button>
+                  )
+                })}
+                <button
+                  onClick={() => goToPage(page + 1)}
+                  disabled={(exhausted && page >= totalPages - 1) || loading}
+                  className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         )}
