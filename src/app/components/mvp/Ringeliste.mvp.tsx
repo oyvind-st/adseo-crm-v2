@@ -1211,7 +1211,7 @@ function CallPanel({
                  className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
                 <ExternalLink className="w-3 h-3" /> Brreg
               </a>
-              <a href={`https://www.proff.no/bransjes%C3%B8k?q=${row.orgnr}`} target="_blank" rel="noopener noreferrer"
+              <a href={`https://www.proff.no/selskap/-/-/-/${row.orgnr}`} target="_blank" rel="noopener noreferrer"
                  className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
                 <ExternalLink className="w-3 h-3" /> Proff
               </a>
