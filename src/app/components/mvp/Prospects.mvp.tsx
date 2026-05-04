@@ -2036,6 +2036,10 @@ function NyregistrerteTab() {
   // companies match each option under the OTHER currently active filters.
   const [bransjeCounts, setBransjeCounts] = useState<Record<string, number>>({})
   const [kommuneCounts, setKommuneCounts] = useState<Record<string, number>>({})
+  // Pagination — full nyregistrerte table can be 8 000+ rows for last 30 days.
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(50)
+  const [totalCount, setTotalCount] = useState(0)
   const [ringeliste, setRingeliste] = useState<Set<string>>(new Set())
   const [kunder, setKunder] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState<Set<string>>(new Set())
