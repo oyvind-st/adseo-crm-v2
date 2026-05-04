@@ -1150,7 +1150,7 @@ function CompanyDetailPanel({
                 Se på Brønnøysundregistrene
               </a>
               <a
-                href={`https://www.proff.no/selskap/-/-/-/${orgnr}`}
+                href={`https://www.proff.no/bransjesøk?q=${orgnr}`}
                 target="_blank" rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
               >
