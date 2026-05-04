@@ -65,56 +65,46 @@ interface SearchParams {
 // ─────────────────────────────────────────────
 const BRREG = 'https://data.brreg.no/enhetsregisteret/api/enheter'
 
-const BRANSJER = [
-  { gruppe: 'Bygg og anlegg', koder: [
-    { kode: '41', navn: 'Oppføring av bygninger' },
-    { kode: '43', navn: 'Spesialisert bygge- og anleggsvirksomhet' },
-    { kode: '42', navn: 'Anleggsvirksomhet' },
-  ]},
-  { gruppe: 'IT og teknologi', koder: [
-    { kode: '62', navn: 'Tjenester tilknyttet IT' },
-    { kode: '63', navn: 'Informasjonstjenester' },
-    { kode: '61', navn: 'Telekommunikasjon' },
-  ]},
-  { gruppe: 'Handel', koder: [
-    { kode: '47', navn: 'Detaljhandel' },
-    { kode: '46', navn: 'Engroshandel' },
-    { kode: '45', navn: 'Handel med motorvogner' },
-  ]},
-  { gruppe: 'Regnskap og finans', koder: [
-    { kode: '69.201', navn: 'Regnskap og bokføring' },
-    { kode: '64', navn: 'Finansieringsvirksomhet' },
-    { kode: '66', navn: 'Hjelpevirksomhet for finansiering' },
-  ]},
-  { gruppe: 'Konsulent og rådgivning', koder: [
-    { kode: '70.22', navn: 'Bedriftsrådgivning' },
-    { kode: '73', navn: 'Reklame og markedsundersøkelse' },
-    { kode: '74', navn: 'Annen faglig, vitenskapelig virksomhet' },
-  ]},
-  { gruppe: 'Transport og logistikk', koder: [
-    { kode: '49', navn: 'Landtransport og rørtransport' },
-    { kode: '52', navn: 'Lagring og hjelpevirksom. for transport' },
-    { kode: '53', navn: 'Post og distribusjonsvirksomhet' },
-  ]},
-  { gruppe: 'Restaurant og overnatting', koder: [
-    { kode: '56', navn: 'Serveringsvirksomhet' },
-    { kode: '55', navn: 'Overnattingsvirksomhet' },
-  ]},
-  { gruppe: 'Helse og velvære', koder: [
-    { kode: '86', navn: 'Helsetjenester' },
-    { kode: '96', navn: 'Personlig tjenesteytelse' },
-    { kode: '88', navn: 'Sosiale omsorgstjenester uten botilbud' },
-  ]},
-  { gruppe: 'Industri og produksjon', koder: [
-    { kode: '25', navn: 'Metallvareindustri' },
-    { kode: '28', navn: 'Produksjon av maskiner og utstyr' },
-    { kode: '10', navn: 'Næringsmiddelindustri' },
-  ]},
-  { gruppe: 'Eiendom', koder: [
-    { kode: '68', navn: 'Omsetning og drift av fast eiendom' },
-    { kode: '41.200', navn: 'Boligbyggelag' },
-  ]},
-]
+// Section names (NACE level 1, A-U) for grouping the divisions in BransjeCombobox.
+// Loaded once from brreg_naeringskoder along with the level-2 divisions we use as
+// the actual filterable bransje codes.
+type BransjeGruppe = { gruppe: string; koder: { kode: string; navn: string }[] }
+let _bransjerCache: BransjeGruppe[] | null = null
+
+async function loadBransjerFromSupabase(): Promise<BransjeGruppe[]> {
+  if (_bransjerCache) return _bransjerCache
+  try {
+    const { data, error } = await supabase
+      .from('brreg_naeringskoder')
+      .select('kode, parent_kode, level, navn')
+      .lte('level', 2)
+      .order('kode')
+    if (error || !data) return []
+
+    // Build section (level 1) and division (level 2) lookups
+    const sections = new Map<string, string>()  // section letter → name
+    const divisionsBySection: Record<string, { kode: string; navn: string }[]> = {}
+    for (const r of data as any[]) {
+      if (r.level === 1) sections.set(r.kode, r.navn)
+    }
+    for (const r of data as any[]) {
+      if (r.level === 2 && r.parent_kode) {
+        if (!divisionsBySection[r.parent_kode]) divisionsBySection[r.parent_kode] = []
+        divisionsBySection[r.parent_kode].push({ kode: r.kode, navn: r.navn })
+      }
+    }
+
+    _bransjerCache = Array.from(sections.entries())
+      .filter(([letter]) => divisionsBySection[letter]?.length)
+      .map(([letter, name]) => ({
+        gruppe: name,
+        koder: divisionsBySection[letter] || [],
+      }))
+    return _bransjerCache
+  } catch {
+    return []
+  }
+}
 
 const ORG_FORMER = [
   { kode: 'AS',  label: 'AS' },
@@ -432,7 +422,10 @@ function BransjeCombobox({
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [bransjer, setBransjer] = useState<BransjeGruppe[]>([])
   const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { loadBransjerFromSupabase().then(setBransjer) }, [])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -442,7 +435,7 @@ function BransjeCombobox({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const allKoder = BRANSJER.flatMap(g => g.koder)
+  const allKoder = bransjer.flatMap(g => g.koder)
   const filtered = query
     ? allKoder.filter(k => k.navn.toLowerCase().includes(query.toLowerCase()) || k.kode.includes(query))
     : null
@@ -504,7 +497,7 @@ function BransjeCombobox({
             />
           </div>
           <div className="py-1">
-            {(filtered ? [{ gruppe: 'Søkeresultater', koder: filtered }] : BRANSJER).map(gruppe => (
+            {(filtered ? [{ gruppe: 'Søkeresultater', koder: filtered }] : bransjer).map(gruppe => (
               <div key={gruppe.gruppe}>
                 <div className="px-3 py-1 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">
                   {gruppe.gruppe}
@@ -2107,20 +2100,22 @@ function NyregistrerteTab() {
     q1 = applyShared(q1)
     if (kommuner.length) q1 = q1.in('kommunenummer', kommuner)
 
-    q1.limit(50000).then(({ data }: { data: any[] | null }) => {
-      const counts: Record<string, number> = {}
-      const koderList = BRANSJER.flatMap(g => g.koder.map(k => k.kode))
-      for (const r of data || []) {
-        const code: string | null = r.bransje_kode
-        if (!code) continue
-        // A row with naeringskode "47.110" matches the parent prefix "47" — count under both.
-        for (const k of koderList) {
-          if (code === k || code.startsWith(k + '.') || code.startsWith(k)) {
-            counts[k] = (counts[k] || 0) + 1
+    loadBransjerFromSupabase().then(grupper => {
+      const koderList = grupper.flatMap(g => g.koder.map(k => k.kode))
+      q1.limit(50000).then(({ data }: { data: any[] | null }) => {
+        const counts: Record<string, number> = {}
+        for (const r of data || []) {
+          const code: string | null = r.bransje_kode
+          if (!code) continue
+          // A row with naeringskode "47.110" matches the level-2 prefix "47" — count under each match.
+          for (const k of koderList) {
+            if (code === k || code.startsWith(k + '.') || code.startsWith(k)) {
+              counts[k] = (counts[k] || 0) + 1
+            }
           }
         }
-      }
-      setBransjeCounts(counts)
+        setBransjeCounts(counts)
+      })
     })
 
     // Kommune counts: keep bransje filter, drop kommune filter
