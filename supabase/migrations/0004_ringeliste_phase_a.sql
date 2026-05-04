@@ -31,3 +31,7 @@ CREATE INDEX IF NOT EXISTS idx_ringelogg_bruker_dato
 
 CREATE INDEX IF NOT EXISTS idx_ringelogg_orgnr
   ON ringelogg(org_nummer);
+
+-- 4) Sist kontaktet på ringeliste (settes etter ringelogg-event)
+ALTER TABLE ringeliste
+  ADD COLUMN IF NOT EXISTS sist_kontaktet TIMESTAMPTZ;

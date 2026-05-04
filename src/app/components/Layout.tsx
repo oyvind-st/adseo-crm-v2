@@ -32,6 +32,7 @@ export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const [ringelisteCount, setRingelisteCount] = useState<number | null>(null);
   const { isDarkMode, toggleDarkMode } = useDarkMode();
   const { isMVPMode, toggleMVPMode } = useMVPMode();
   const { user, signOut } = useCurrentUser();
@@ -44,6 +45,18 @@ export function Layout() {
       // Must call .then() — supabase query builder is lazy and never fires with void
       supabase.rpc('update_last_seen', { user_id: userId }).then(() => {});
     }
+  }, [location.pathname]);
+
+  // Refresh ringeliste count when route changes (cheap aggregate query)
+  useEffect(() => {
+    let cancel = false;
+    supabase
+      .from('ringeliste')
+      .select('id', { count: 'exact', head: true })
+      .then(({ count }) => {
+        if (!cancel && typeof count === 'number') setRingelisteCount(count);
+      });
+    return () => { cancel = true; };
   }, [location.pathname]);
 
   const isActive = (path: string) => {
@@ -147,9 +160,11 @@ export function Layout() {
             <Phone className="w-5 h-5" />
             <div className="flex items-center justify-between flex-1">
               <span className="font-medium">Ringeliste</span>
-              <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full">
-                23
-              </span>
+              {ringelisteCount !== null && ringelisteCount > 0 && (
+                <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full">
+                  {ringelisteCount}
+                </span>
+              )}
             </div>
           </Link>
 
