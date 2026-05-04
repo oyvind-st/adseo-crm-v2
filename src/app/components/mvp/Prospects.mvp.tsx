@@ -1596,7 +1596,7 @@ function ProspektSok() {
   return (
     <div className="flex gap-0">
       {/* Filter panel */}
-      <div className="w-72 flex-shrink-0 border-r border-slate-200 dark:border-slate-700 p-5 space-y-5 bg-slate-50 dark:bg-slate-800/50">
+      <div className="w-72 flex-shrink-0 border-r border-slate-200 dark:border-slate-700 p-5 space-y-5 bg-white dark:bg-slate-800">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
             <Filter className="w-4 h-4" />
@@ -1770,7 +1770,7 @@ function ProspektSok() {
       {/* Results panel */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Search bar */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3">
+        <div className="p-4 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
@@ -1792,7 +1792,7 @@ function ProspektSok() {
 
         {/* Bulk action bar */}
         {hasSearched && (
-          <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+          <div className="px-4 py-2.5 bg-slate-50/70 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-400">
                 <input
@@ -1828,7 +1828,7 @@ function ProspektSok() {
         )}
 
         {/* Table */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto bg-white dark:bg-slate-800">
           {loading && (
             <div className="flex items-center justify-center h-48 gap-3">
               <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
@@ -2314,7 +2314,7 @@ function NyregistrerteTab() {
   return (
     <div className="flex gap-0">
       {/* Filter panel */}
-      <div className="w-72 flex-shrink-0 border-r border-slate-200 dark:border-slate-700 p-5 space-y-5 bg-slate-50 dark:bg-slate-800/50">
+      <div className="w-72 flex-shrink-0 border-r border-slate-200 dark:border-slate-700 p-5 space-y-5 bg-white dark:bg-slate-800">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
             <Filter className="w-4 h-4" />
@@ -2414,7 +2414,7 @@ function NyregistrerteTab() {
       {/* Main panel */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Bulk action bar */}
-        <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <div className="px-4 py-2.5 bg-slate-50/70 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-400">
               <input
@@ -2441,7 +2441,7 @@ function NyregistrerteTab() {
         </div>
 
         {/* Table */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto bg-white dark:bg-slate-800">
         {loading ? (
           <div className="flex items-center justify-center h-40 gap-3">
             <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
@@ -2457,7 +2457,7 @@ function NyregistrerteTab() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+              <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 sticky top-0">
                 <th className="pl-4 pr-2 py-3 w-10" />
                 <SortableTh label="Bedriftsnavn" field="navn"          sortField={sortField} sortAsc={sortAsc} onSort={f => { if (f === sortField) setSortAsc(!sortAsc); else { setSortField(f); setSortAsc(true) } }} />
                 <SortableTh label="Bransje"      field="bransje_navn"  sortField={sortField} sortAsc={sortAsc} onSort={f => { if (f === sortField) setSortAsc(!sortAsc); else { setSortField(f); setSortAsc(true) } }} />
@@ -2668,7 +2668,7 @@ export function ProspectsMVP() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-auto bg-white dark:bg-slate-800">
+      <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-900">
         {activeTab === 'sok' && <ProspektSok />}
         {activeTab === 'nyregistrerte' && <NyregistrerteTab />}
       </div>
