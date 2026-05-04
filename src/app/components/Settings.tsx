@@ -1069,8 +1069,7 @@ function ChangePasswordForm() {
     if (newPassword.length < 6) { setMsg('Passordet må være minst 6 tegn'); return; }
     if (newPassword !== confirm) { setMsg('Passordene stemmer ikke overens'); return; }
     setSaving(true); setMsg('');
-    const { supabase: client } = await import('../../lib/supabase');
-    const { error } = await client.auth.updateUser({ password: newPassword });
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) setMsg('Feil: ' + error.message);
     else { setMsg('Passord oppdatert ✓'); setNewPassword(''); setConfirm(''); }
     setSaving(false);

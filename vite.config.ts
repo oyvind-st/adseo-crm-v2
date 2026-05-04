@@ -33,4 +33,20 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  build: {
+    // Split heavy vendor packages into their own chunks so the main bundle
+    // stays small and browser caching can keep stable vendor code across deploys.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'supabase': ['@supabase/supabase-js'],
+          'mui': ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
+          'recharts': ['recharts'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
+  },
 })

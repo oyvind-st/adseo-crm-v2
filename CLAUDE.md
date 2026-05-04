@@ -57,7 +57,7 @@ supabase/
 
 ## Nøkkelmønstre
 - **Figma Make-filer** ligger i `/sessions/friendly-zen-cannon/mnt/uploads/` og i `/sessions/friendly-zen-cannon/figma-new/src/src/app/components/mvp/` — disse skal alltid brukes som utgangspunkt for nye komponenter
-- **Vercel CDN-cache**: Etter push må man alltid gjøre **Redeploy uten «Use existing Build Cache»** for at endringer skal vises
+- **Vercel cache-headers**: `vercel.json` setter `no-cache` på `/` og `/index.html` og `max-age=31536000, immutable` på `/assets/*`. Endringer vises umiddelbart på neste deploy uten manuell «Redeploy uten Build Cache».
 - **Supabase `.rpc()`** er lazy — må kalle `.then(() => {})` for at spørringen faktisk sendes
 - **Tabs**: Bruk inline `<button>`-tabs (samme stil som TicketList), ikke den shared Tabs-komponenten
 - Shared komponenter: `LeveranseRow`, `TicketRow` i `src/app/components/shared/`
