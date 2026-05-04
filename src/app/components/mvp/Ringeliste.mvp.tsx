@@ -673,6 +673,14 @@ function RingeRowCard({
               >
                 <PhoneCall className="w-4 h-4" /> {active ? 'Åpen' : 'Ring'}
               </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRemove() }}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-md transition-colors"
+                  title="Fjern fra ringeliste"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               <div className="relative" ref={ref}>
                 <button
                   onClick={() => setMenuOpen(o => !o)}
@@ -700,15 +708,9 @@ function RingeRowCard({
                         {p.navn}
                       </button>
                     ))}
-                    <div className="border-t border-slate-200 dark:border-slate-700 my-1" />
-                    <button
-                      onClick={() => { onRemove(); setMenuOpen(false) }}
-                      className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-600 dark:text-rose-400"
-                    >
-                      Fjern fra ringeliste
-                    </button>
                   </div>
                 )}
+              </div>
               </div>
             </div>
           </div>
