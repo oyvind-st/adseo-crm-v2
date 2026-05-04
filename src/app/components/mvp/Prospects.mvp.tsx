@@ -2154,112 +2154,146 @@ function NyregistrerteTab() {
     return new Date(d).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' })
   }
 
+  const resetFilters = () => {
+    setPeriod(30)
+    setBransjer([])
+    setKommuner([])
+    setHarHjemmeside(false)
+    setHarTelefon(false)
+    setHarEpost(false)
+  }
+
   return (
-    <div className="p-5 space-y-4">
-      {/* Controls */}
-      <div className="flex items-center flex-wrap gap-3">
-        {/* Period filter */}
-        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
-          {([7, 30, 90, null] as const).map(p => (
-            <button
-              key={String(p)}
-              onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                period === p
-                  ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              {p === null ? 'Alle' : `Siste ${p} dager`}
-            </button>
-          ))}
-        </div>
-
-        {/* Bransje filter */}
-        <div className="w-52">
-          <BransjeCombobox selected={bransjer} onChange={setBransjer} />
-        </div>
-
-        {/* Kommune filter */}
-        <div className="w-44">
-          <KommuneCombobox selected={kommuner} onChange={setKommuner} />
-        </div>
-
-        <div className="flex-1" />
-
-        {syncInfo && (
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            Sist synkronisert: {formatDate(syncInfo.sist_kjort)}
-            {syncInfo.antall_hentet !== undefined && ` — ${syncInfo.antall_hentet} nye bedrifter`}
-          </span>
-        )}
-
-        <button
-          onClick={handleSync}
-          disabled={syncing}
-          className="flex items-center gap-2 px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-          Synkroniser nå
-        </button>
-      </div>
-
-      {/* Contact-info filter row */}
-      <div className="flex items-center flex-wrap gap-4 px-1">
-        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-          Kontaktinfo tilgjengelig:
-        </span>
-        {[
-          { label: 'Hjemmeside', val: harHjemmeside, set: setHarHjemmeside, icon: <Globe className="w-3.5 h-3.5 text-blue-400" /> },
-          { label: 'Telefon',    val: harTelefon,    set: setHarTelefon,    icon: <Phone className="w-3.5 h-3.5 text-green-400" /> },
-          { label: 'E-post',     val: harEpost,      set: setHarEpost,      icon: <Mail  className="w-3.5 h-3.5 text-purple-400" /> },
-        ].map(({ label, val, set, icon }) => (
-          <label key={label} className="flex items-center gap-1.5 cursor-pointer group">
-            <input type="checkbox" checked={val} onChange={e => set(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-            {icon}
-            <span className="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{label}</span>
-          </label>
-        ))}
-        {(harHjemmeside || harTelefon || harEpost) && (
+    <div className="flex gap-0">
+      {/* Filter panel */}
+      <div className="w-72 flex-shrink-0 border-r border-slate-200 dark:border-slate-700 p-5 space-y-5 bg-slate-50 dark:bg-slate-800/50">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+            <Filter className="w-4 h-4" />
+            Filtre
+          </h3>
           <button
-            onClick={() => { setHarHjemmeside(false); setHarTelefon(false); setHarEpost(false) }}
+            onClick={resetFilters}
             className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
           >
             Nullstill
           </button>
-        )}
-      </div>
-
-      {/* Bulk action bar */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-400">
-            <input
-              type="checkbox"
-              onChange={toggleAll}
-              checked={rows.length > 0 && rows.every(r => selected.has(r.orgnr))}
-              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-            />
-            Velg alle
-          </label>
-          <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-full px-2 text-xs font-medium py-0.5">
-            {rows.length} bedrifter
-          </span>
         </div>
-        {selected.size > 0 && (
+
+        {/* Periode */}
+        <div>
+          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
+            Periode
+          </label>
+          <div className="flex flex-col gap-1 bg-white dark:bg-slate-700 rounded-lg p-1 border border-slate-200 dark:border-slate-600">
+            {([7, 30, 90, null] as const).map(p => (
+              <button
+                key={String(p)}
+                onClick={() => setPeriod(p)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors text-left ${
+                  period === p
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-600'
+                }`}
+              >
+                {p === null ? 'Alle' : `Siste ${p} dager`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Bransje */}
+        <div>
+          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
+            Bransje
+          </label>
+          <BransjeCombobox selected={bransjer} onChange={setBransjer} />
+        </div>
+
+        {/* Kommune */}
+        <div>
+          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
+            Kommune
+          </label>
+          <KommuneCombobox selected={kommuner} onChange={setKommuner} />
+        </div>
+
+        {/* Kontaktinfo tilgjengelig */}
+        <div>
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+            Kontaktinfo tilgjengelig
+          </p>
+          <div className="space-y-2">
+            {[
+              { label: 'Har hjemmeside', val: harHjemmeside, set: setHarHjemmeside, icon: <Globe className="w-3.5 h-3.5 text-blue-400" /> },
+              { label: 'Har telefon',    val: harTelefon,    set: setHarTelefon,    icon: <Phone className="w-3.5 h-3.5 text-green-400" /> },
+              { label: 'Har e-post',     val: harEpost,      set: setHarEpost,      icon: <Mail  className="w-3.5 h-3.5 text-purple-400" /> },
+            ].map(({ label, val, set, icon }) => (
+              <label key={label} className="flex items-center gap-2 cursor-pointer group">
+                <input type="checkbox" checked={val} onChange={e => set(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                <div className="flex items-center gap-1.5">
+                  {icon}
+                  <span className="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{label}</span>
+                </div>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
+            Filtreres på lagrede kolonner — bare rader synkronisert etter at funksjonen ble lagt til vil ha data her.
+          </p>
+        </div>
+
+        {/* Sync info + button */}
+        <div className="pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2">
+          {syncInfo && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Sist synkronisert: {formatDate(syncInfo.sist_kjort)}
+              {syncInfo.antall_hentet !== undefined && ` — ${syncInfo.antall_hentet} bedrifter`}
+            </p>
+          )}
           <button
-            onClick={addBulkToRingeliste}
-            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+            onClick={handleSync}
+            disabled={syncing}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Legg til ringeliste ({newToRingeliste})
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Synkroniserer…' : 'Synkroniser nå'}
           </button>
-        )}
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+      {/* Main panel */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        {/* Bulk action bar */}
+        <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-400">
+              <input
+                type="checkbox"
+                onChange={toggleAll}
+                checked={rows.length > 0 && rows.every(r => selected.has(r.orgnr))}
+                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              Velg alle på siden
+            </label>
+            <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-full px-2 text-xs font-medium py-0.5">
+              {rows.length.toLocaleString('nb')} bedrifter
+            </span>
+          </div>
+          {selected.size > 0 && (
+            <button
+              onClick={addBulkToRingeliste}
+              className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Legg til ringeliste ({newToRingeliste})
+            </button>
+          )}
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center h-40 gap-3">
             <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
@@ -2362,6 +2396,7 @@ function NyregistrerteTab() {
             </tbody>
           </table>
         )}
+        </div>
       </div>
 
       {/* Detail panel */}
