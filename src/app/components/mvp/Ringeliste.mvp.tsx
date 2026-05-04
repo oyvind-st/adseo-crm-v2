@@ -478,7 +478,7 @@ export function RingelisteMVP() {
       {/* End sticky top */}
 
       <div className="px-6 pt-4 pb-6">
-      <div className="grid grid-cols-12 gap-4 items-start">
+      <div className="grid grid-cols-12 gap-4">
         <div className="col-span-7">
           <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200">
@@ -518,7 +518,7 @@ export function RingelisteMVP() {
           </div>
         </div>
 
-        <div className="col-span-5">
+        <div className="col-span-5 h-full">
           <div className="sticky top-[260px]">
             <div className="max-h-[calc(100vh-280px)] overflow-y-auto rounded-lg">
             {activeRow ? (
