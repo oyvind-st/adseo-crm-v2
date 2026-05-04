@@ -1164,7 +1164,7 @@ function ResultRow({
   return (
     <tr
       onClick={onRowClick}
-      className={`border-b border-slate-100 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer ${
+      className={`border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer ${
         checked ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-l-blue-500' : ''
       }`}
     >
@@ -1828,7 +1828,7 @@ function ProspektSok() {
         )}
 
         {/* Table */}
-        <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-900">
+        <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-950">
           {loading && (
             <div className="flex items-center justify-center h-48 gap-3">
               <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
@@ -1874,7 +1874,7 @@ function ProspektSok() {
           {!loading && hasSearched && displayItems.length > 0 && (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 sticky top-0">
+                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 sticky top-0">
                   <th className="pl-4 pr-2 py-3 w-10" />
                   <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
                     Bedriftsnavn
@@ -2441,7 +2441,7 @@ function NyregistrerteTab() {
         </div>
 
         {/* Table */}
-        <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-900">
+        <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-950">
         {loading ? (
           <div className="flex items-center justify-center h-40 gap-3">
             <div className="w-5 h-5 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
@@ -2478,7 +2478,7 @@ function NyregistrerteTab() {
                   <tr
                     key={row.orgnr}
                     onClick={() => setSelectedOrgnr(row.orgnr)}
-                    className={`hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer ${
+                    className={`hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer ${
                       checked ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-l-blue-500' : ''
                     }`}
                   >
@@ -2668,7 +2668,7 @@ export function ProspectsMVP() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-900">
+      <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-950">
         {activeTab === 'sok' && <ProspektSok />}
         {activeTab === 'nyregistrerte' && <NyregistrerteTab />}
       </div>
