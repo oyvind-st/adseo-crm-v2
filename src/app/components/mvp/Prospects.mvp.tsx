@@ -66,43 +66,50 @@ interface SearchParams {
 const BRREG = 'https://data.brreg.no/enhetsregisteret/api/enheter'
 
 // Section names (NACE level 1, A-U) for grouping the divisions in BransjeCombobox.
-// Loaded once from brreg_naeringskoder along with the level-2 divisions we use as
-// the actual filterable bransje codes.
+// Loaded once from brreg_naeringskoder. We expose:
+//   - `grupper`: level-2 divisions grouped by section (the default visible list)
+//   - `alleKoder`: every code from level 2 through 5 (used by full-text search so
+//     users can type 'idrett' and find specific codes like 93.120).
 type BransjeGruppe = { gruppe: string; koder: { kode: string; navn: string }[] }
-let _bransjerCache: BransjeGruppe[] | null = null
+type BransjeKode = { kode: string; navn: string; level: number; parent_kode: string | null }
+type BransjerData = { grupper: BransjeGruppe[]; alleKoder: BransjeKode[] }
+let _bransjerCache: BransjerData | null = null
 
-async function loadBransjerFromSupabase(): Promise<BransjeGruppe[]> {
+async function loadBransjerFromSupabase(): Promise<BransjerData> {
   if (_bransjerCache) return _bransjerCache
   try {
     const { data, error } = await supabase
       .from('brreg_naeringskoder')
       .select('kode, parent_kode, level, navn')
-      .lte('level', 2)
       .order('kode')
-    if (error || !data) return []
+    if (error || !data) return { grupper: [], alleKoder: [] }
 
     // Build section (level 1) and division (level 2) lookups
-    const sections = new Map<string, string>()  // section letter → name
+    const sections = new Map<string, string>()
     const divisionsBySection: Record<string, { kode: string; navn: string }[]> = {}
+    const alleKoder: BransjeKode[] = []
     for (const r of data as any[]) {
-      if (r.level === 1) sections.set(r.kode, r.navn)
-    }
-    for (const r of data as any[]) {
-      if (r.level === 2 && r.parent_kode) {
-        if (!divisionsBySection[r.parent_kode]) divisionsBySection[r.parent_kode] = []
-        divisionsBySection[r.parent_kode].push({ kode: r.kode, navn: r.navn })
+      if (r.level === 1) {
+        sections.set(r.kode, r.navn)
+      } else if (r.level >= 2 && r.level <= 5) {
+        alleKoder.push({ kode: r.kode, navn: r.navn, level: r.level, parent_kode: r.parent_kode })
+        if (r.level === 2 && r.parent_kode) {
+          if (!divisionsBySection[r.parent_kode]) divisionsBySection[r.parent_kode] = []
+          divisionsBySection[r.parent_kode].push({ kode: r.kode, navn: r.navn })
+        }
       }
     }
 
-    _bransjerCache = Array.from(sections.entries())
+    const grupper = Array.from(sections.entries())
       .filter(([letter]) => divisionsBySection[letter]?.length)
       .map(([letter, name]) => ({
         gruppe: name,
         koder: divisionsBySection[letter] || [],
       }))
+    _bransjerCache = { grupper, alleKoder }
     return _bransjerCache
   } catch {
-    return []
+    return { grupper: [], alleKoder: [] }
   }
 }
 
@@ -422,10 +429,16 @@ function BransjeCombobox({
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [bransjer, setBransjer] = useState<BransjeGruppe[]>([])
+  const [grupper, setGrupper] = useState<BransjeGruppe[]>([])
+  const [alleKoder, setAlleKoder] = useState<BransjeKode[]>([])
   const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { loadBransjerFromSupabase().then(setBransjer) }, [])
+  useEffect(() => {
+    loadBransjerFromSupabase().then(d => {
+      setGrupper(d.grupper)
+      setAlleKoder(d.alleKoder)
+    })
+  }, [])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -435,16 +448,24 @@ function BransjeCombobox({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const allKoder = bransjer.flatMap(g => g.koder)
+  // For the selected-name lookup we need every code on every level
+  const lookupAll = alleKoder.length > 0 ? alleKoder.map(k => ({ kode: k.kode, navn: k.navn })) : grupper.flatMap(g => g.koder)
+
+  // Full-text search runs across every level (2-5), so typing 'idrett' finds
+  // 93.120 'Aktiviteter i idrettslag og -klubber' even though the dropdown
+  // normally shows level-2 only.
   const filtered = query
-    ? allKoder.filter(k => k.navn.toLowerCase().includes(query.toLowerCase()) || k.kode.includes(query))
+    ? alleKoder.filter(k =>
+        k.navn.toLowerCase().includes(query.toLowerCase()) ||
+        k.kode.toLowerCase().includes(query.toLowerCase())
+      ).slice(0, 100)  // cap to keep the dropdown responsive
     : null
 
   const toggle = (kode: string) => {
     onChange(selected.includes(kode) ? selected.filter(k => k !== kode) : [...selected, kode])
   }
 
-  const selectedNames = selected.map(k => allKoder.find(b => b.kode === k)?.navn || k)
+  const selectedNames = selected.map(k => lookupAll.find(b => b.kode === k)?.navn || k)
 
   return (
     <div className="relative" ref={ref}>
@@ -497,7 +518,9 @@ function BransjeCombobox({
             />
           </div>
           <div className="py-1">
-            {(filtered ? [{ gruppe: 'Søkeresultater', koder: filtered }] : bransjer).map(gruppe => (
+            {(filtered
+              ? [{ gruppe: `Søkeresultater (${filtered.length})`, koder: filtered.map(k => ({ kode: k.kode, navn: k.navn })) }]
+              : grupper).map(gruppe => (
               <div key={gruppe.gruppe}>
                 <div className="px-3 py-1 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">
                   {gruppe.gruppe}
@@ -2109,8 +2132,8 @@ function NyregistrerteTab() {
     q1 = applyShared(q1)
     if (kommuner.length) q1 = q1.in('kommunenummer', kommuner)
 
-    loadBransjerFromSupabase().then(grupper => {
-      const koderList = grupper.flatMap(g => g.koder.map(k => k.kode))
+    loadBransjerFromSupabase().then(d => {
+      const koderList = d.grupper.flatMap(g => g.koder.map(k => k.kode))
       q1.limit(50000).then(({ data }: { data: any[] | null }) => {
         const counts: Record<string, number> = {}
         for (const r of data || []) {
