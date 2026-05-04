@@ -423,7 +423,9 @@ export function RingelisteMVP() {
   }, [profiles])
 
   return (
-    <div className="p-6 space-y-4 min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      {/* Sticky top: header + stats + filters */}
+      <div className="sticky top-0 z-20 bg-slate-50 dark:bg-slate-950 px-6 pt-6 pb-4 space-y-4 border-b border-slate-200 dark:border-slate-800">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -472,8 +474,11 @@ export function RingelisteMVP() {
         />
       </div>
 
-      {/* Layout: list + always-visible right panel */}
-      <div className="grid grid-cols-12 gap-4 min-h-[60vh]">
+      </div>
+      {/* End sticky top */}
+
+      <div className="px-6 pt-4 pb-6">
+      <div className="grid grid-cols-12 gap-4 items-start">
         <div className="col-span-7">
           <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200">
@@ -486,7 +491,7 @@ export function RingelisteMVP() {
                 Ingen bedrifter i ringelisten med disse filtrene.
               </div>
             ) : (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[70vh] overflow-y-auto">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {visibleRows.map((row, i) => (
                   <RingeRowCard
                     key={row.id}
@@ -514,20 +519,25 @@ export function RingelisteMVP() {
         </div>
 
         <div className="col-span-5">
-          {activeRow ? (
-            <CallPanel
-              row={activeRow}
-              userId={user?.id || null}
-              onClose={() => { setActiveId(null); setExpandedId(null) }}
-              onSaved={async () => { await loadRows(); await loadStats() }}
-              onConverted={(kundeId) => {
-                navigate(`/customers/${kundeId}`)
-              }}
-            />
-          ) : (
-            <CallPanelPlaceholder />
-          )}
+          <div className="sticky top-[260px]">
+            <div className="max-h-[calc(100vh-280px)] overflow-y-auto rounded-lg">
+            {activeRow ? (
+              <CallPanel
+                row={activeRow}
+                userId={user?.id || null}
+                onClose={() => { setActiveId(null); setExpandedId(null) }}
+                onSaved={async () => { await loadRows(); await loadStats() }}
+                onConverted={(kundeId) => {
+                  navigate(`/customers/${kundeId}`)
+                }}
+              />
+            ) : (
+              <CallPanelPlaceholder />
+            )}
+            </div>
+          </div>
         </div>
+      </div>
       </div>
     </div>
   )
