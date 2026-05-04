@@ -1099,15 +1099,25 @@ function CompanyDetailPanel({
               )}
             </div>
 
-            {/* Brreg-lenke */}
-            <a
-              href={`https://virksomhet.brreg.no/nb/oppslag/enheter/${orgnr}`}
-              target="_blank" rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Se på Brønnøysundregistrene
-            </a>
+            {/* Eksterne lenker */}
+            <div className="flex flex-col gap-2">
+              <a
+                href={`https://virksomhet.brreg.no/nb/oppslag/enheter/${orgnr}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Se på Brønnøysundregistrene
+              </a>
+              <a
+                href={`https://www.proff.no/selskap/-/-/-/${orgnr}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Se på Proff
+              </a>
+            </div>
           </div>
         ) : (
           <div className="p-6 text-center text-slate-400">Kunne ikke hente bedriftsinfo</div>
