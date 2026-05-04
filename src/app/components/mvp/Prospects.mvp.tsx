@@ -165,6 +165,172 @@ async function fetchCompanyDetail(orgnr: string): Promise<Company | null> {
   } catch { return null }
 }
 
+// ─────────────────────────────────────────────
+// Kontaktpersoner (key contacts) from Brreg /roller
+// ─────────────────────────────────────────────
+interface Kontaktperson {
+  kode: string                  // Brreg role code: DAGL, LEDE, INNH, etc.
+  rolle: string                 // Display name: "Daglig leder", "Innehaver"
+  navn: string                  // Full name
+  fodselsdato?: string          // Normalized YYYY-MM-DD
+  fodselsaar?: number
+  prioritet: number             // Lower = higher priority
+  // Authority flags from Brreg's /fullmakt API (authoritative — no heuristic)
+  signaturAlene: boolean        // Can sign alone on behalf of the company
+  signaturFellesskap: boolean   // Part of a multi-person signature combination
+  prokuraAlene: boolean         // Has prokura alone
+  prokuraFellesskap: boolean    // Part of a multi-person prokura combination
+}
+
+interface FullmaktData {
+  fritekst?: string             // Free-text signing rule (e.g. "Daglig leder alene...")
+  // Map from person key (name|dob) to roles found in signing combinations.
+  alenePersoner: Set<string>    // Persons in 1-person combinations
+  fellesPersoner: Set<string>   // Persons in multi-person combinations
+}
+
+// Priority order based on Norwegian B2B sales reality. Tier 1 = primary
+// contacts, Tier 2 = fallback only if no Tier 1 exists. MEDL/VARA/REVI are
+// excluded entirely — we don't want to spam board members or auditors.
+const KONTAKT_PRIORITET: Record<string, number> = {
+  DAGL: 1,   // Daglig leder — top priority
+  INNH: 2,   // Innehaver (ENK) — IS the business
+  KOMP: 3,   // Komplementar (KS)
+  DTPR: 4,   // Deltaker (DA/ANS)
+  BSTV: 5,   // Bestyrende reder
+  KONT: 6,   // Eksplisitt kontaktperson
+  FFGM: 7,   // Forretningsfører
+  // Tier 2 — only if no Tier 1 found
+  LEDE: 50,  // Styreleder — fallback for small AS without DAGL
+}
+
+// Normalize the two date formats Brreg returns: /roller gives ISO "YYYY-MM-DD",
+// /fullmakt gives Norwegian "DD.MM.YYYY". We normalize to ISO for matching.
+function normalizeFodselsdato(s?: string): string {
+  if (!s) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(s)
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : s
+}
+
+// Build a stable key for matching a person across the /roller and /fullmakt
+// endpoints. Names are case- and whitespace-normalized.
+function personKey(navn: string, fodselsdato?: string): string {
+  const n = navn.trim().toLowerCase().replace(/\s+/g, ' ')
+  return `${n}|${normalizeFodselsdato(fodselsdato)}`
+}
+
+async function fetchFullmakt(orgnr: string, type: 'signatur' | 'prokura'): Promise<FullmaktData> {
+  const empty: FullmaktData = { alenePersoner: new Set(), fellesPersoner: new Set() }
+  try {
+    const resp = await fetch(
+      `https://data.brreg.no/fullmakt/enheter/${orgnr}/${type}`,
+      { headers: { Accept: 'application/json' } }
+    )
+    if (!resp.ok) return empty
+    const data = await resp.json()
+    const grunnlag = data.signeringsGrunnlag
+    if (!grunnlag) return empty
+
+    const result: FullmaktData = {
+      fritekst: grunnlag.signaturProkuraRoller?.signaturProkuraFritekst,
+      alenePersoner: new Set(),
+      fellesPersoner: new Set(),
+    }
+
+    const kombinasjoner = data.signeringsKombinasjon?.kombinasjon || []
+    for (const kombi of kombinasjoner) {
+      const personer = kombi.personRolleKombinasjon || []
+      const target = personer.length === 1 ? result.alenePersoner : result.fellesPersoner
+      for (const p of personer) {
+        target.add(personKey(p.navn, p.fodselsdato))
+      }
+    }
+    return result
+  } catch {
+    return empty
+  }
+}
+
+interface KontakterResult {
+  kontakter: Kontaktperson[]
+  signaturFritekst?: string
+  prokuraFritekst?: string
+}
+
+async function fetchKontaktpersoner(orgnr: string): Promise<KontakterResult> {
+  try {
+    const [rollerResp, signatur, prokura] = await Promise.all([
+      fetch(`https://data.brreg.no/enhetsregisteret/api/enheter/${orgnr}/roller`, { headers: { Accept: 'application/json' } }),
+      fetchFullmakt(orgnr, 'signatur'),
+      fetchFullmakt(orgnr, 'prokura'),
+    ])
+    if (!rollerResp.ok) return { kontakter: [] }
+    const data = await rollerResp.json()
+
+    const all: Kontaktperson[] = []
+    for (const rg of data.rollegrupper || []) {
+      for (const r of rg.roller || []) {
+        if (r.fratraadt || r.avregistrert) continue
+        const kode: string = r.type?.kode
+        const prio = KONTAKT_PRIORITET[kode]
+        if (prio === undefined) continue  // Skip MEDL/VARA/REVI/REGN/etc.
+
+        const p = r.person
+        const e = r.enhet
+        let navn = ''
+        let fodselsdato: string | undefined
+        let fodselsaar: number | undefined
+
+        if (p?.navn) {
+          const parts = [p.navn.fornavn, p.navn.mellomnavn, p.navn.etternavn].filter(Boolean)
+          navn = parts.join(' ').trim()
+          if (p.fodselsdato) {
+            fodselsdato = normalizeFodselsdato(String(p.fodselsdato))
+            fodselsaar = parseInt(fodselsdato.slice(0, 4))
+          }
+        } else if (e?.navn) {
+          navn = e.navn
+        }
+        if (!navn) continue
+
+        const key = personKey(navn, fodselsdato)
+        all.push({
+          kode,
+          rolle: r.type?.beskrivelse || kode,
+          navn,
+          fodselsdato,
+          fodselsaar,
+          prioritet: prio,
+          signaturAlene: signatur.alenePersoner.has(key),
+          signaturFellesskap: signatur.fellesPersoner.has(key),
+          prokuraAlene: prokura.alenePersoner.has(key),
+          prokuraFellesskap: prokura.fellesPersoner.has(key),
+        })
+      }
+    }
+
+    const hasTier1 = all.some(k => k.prioritet < 50)
+    const filtered = hasTier1 ? all.filter(k => k.prioritet < 50) : all
+    const kontakter = filtered.sort((a, b) => {
+      // Boost people with signaturrett alene to the top of equal-priority groups
+      if (a.prioritet === b.prioritet) {
+        if (a.signaturAlene !== b.signaturAlene) return a.signaturAlene ? -1 : 1
+        return a.navn.localeCompare(b.navn, 'nb')
+      }
+      return a.prioritet - b.prioritet
+    })
+
+    return {
+      kontakter,
+      signaturFritekst: signatur.fritekst,
+      prokuraFritekst: prokura.fritekst,
+    }
+  } catch {
+    return { kontakter: [] }
+  }
+}
+
 async function searchBrreg(params: SearchParams): Promise<BrregResult> {
   const url = new URL(BRREG)
   if (params.navn) url.searchParams.set('navn', params.navn)
@@ -580,17 +746,35 @@ function CompanyDetailPanel({
 }: {
   orgnr: string
   onClose: () => void
-  onAdd: (c: Company) => void
+  onAdd: (c: Company, kontakter: Kontaktperson[]) => void
   inRingeliste: boolean
   isKunde: boolean
 }) {
   const [company, setCompany] = useState<Company | null>(null)
   const [loading, setLoading] = useState(true)
+  const [kontakter, setKontakter] = useState<Kontaktperson[]>([])
+  const [signaturFritekst, setSignaturFritekst] = useState<string | undefined>()
+  const [prokuraFritekst, setProkuraFritekst] = useState<string | undefined>()
+  const [kontakterLoading, setKontakterLoading] = useState(true)
 
   useEffect(() => {
     setLoading(true)
+    setKontakterLoading(true)
+    setSignaturFritekst(undefined)
+    setProkuraFritekst(undefined)
     fetchCompanyDetail(orgnr).then(c => { setCompany(c); setLoading(false) })
+    fetchKontaktpersoner(orgnr).then(res => {
+      setKontakter(res.kontakter)
+      setSignaturFritekst(res.signaturFritekst)
+      setProkuraFritekst(res.prokuraFritekst)
+      setKontakterLoading(false)
+    })
   }, [orgnr])
+
+  // Auto-pick the top 1–3 contacts that make sense for B2B outreach. Prefer
+  // people with real signaturrett alene; otherwise rank by KONTAKT_PRIORITET.
+  // (Already pre-sorted by fetchKontaktpersoner.)
+  const foreslatteKontakter = kontakter.slice(0, 3)
 
   const InfoRow = ({ icon, label, value, href }: { icon: React.ReactNode, label: string, value?: string | null, href?: string }) => {
     if (!value) return null
@@ -712,6 +896,86 @@ function CompanyDetailPanel({
               </div>
             </div>
 
+            {/* Nøkkelpersoner — auto-foreslåtte kontaktpersoner (topp 1-3) */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Foreslåtte kontaktpersoner
+                </h3>
+                {foreslatteKontakter.length > 0 && (
+                  <span className="text-xs text-slate-400 dark:text-slate-500">
+                    Topp {foreslatteKontakter.length} av {kontakter.length}
+                  </span>
+                )}
+              </div>
+              {kontakterLoading ? (
+                <div className="space-y-2">
+                  {[...Array(2)].map((_, i) => (
+                    <div key={i} className="h-14 bg-slate-100 dark:bg-slate-700 rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              ) : foreslatteKontakter.length === 0 ? (
+                <p className="text-sm text-slate-400 dark:text-slate-500 italic">Ingen relevante roller funnet i Brreg.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {foreslatteKontakter.map((k, i) => (
+                    <div
+                      key={`${k.kode}-${k.navn}-${i}`}
+                      className="flex items-start gap-3 p-3 rounded-lg border bg-slate-50 dark:bg-slate-700/30 border-slate-200 dark:border-slate-700"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm text-slate-900 dark:text-white">{k.navn}</span>
+                          {k.fodselsaar && (
+                            <span className="text-xs text-slate-400 dark:text-slate-500">f. {k.fodselsaar}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200">
+                            {k.rolle}
+                          </span>
+                          {k.signaturAlene && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                              Signerer alene
+                            </span>
+                          )}
+                          {!k.signaturAlene && k.signaturFellesskap && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                              Signerer i fellesskap
+                            </span>
+                          )}
+                          {k.prokuraAlene && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                              Prokura alene
+                            </span>
+                          )}
+                          {!k.prokuraAlene && k.prokuraFellesskap && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-300">
+                              Prokura i fellesskap
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Signaturbestemmelse fritekst (når Brreg har det) */}
+              {!kontakterLoading && signaturFritekst && (
+                <div className="mt-3 px-3 py-2 bg-slate-100 dark:bg-slate-700/50 border-l-2 border-slate-300 dark:border-slate-600 rounded text-xs">
+                  <p className="font-semibold text-slate-700 dark:text-slate-300 mb-0.5">Signaturbestemmelse</p>
+                  <p className="text-slate-600 dark:text-slate-400">{signaturFritekst}</p>
+                </div>
+              )}
+              {!kontakterLoading && prokuraFritekst && (
+                <div className="mt-2 px-3 py-2 bg-slate-100 dark:bg-slate-700/50 border-l-2 border-slate-300 dark:border-slate-600 rounded text-xs">
+                  <p className="font-semibold text-slate-700 dark:text-slate-300 mb-0.5">Prokura</p>
+                  <p className="text-slate-600 dark:text-slate-400">{prokuraFritekst}</p>
+                </div>
+              )}
+            </div>
+
             {/* Brreg-lenke */}
             <a
               href={`https://www.brreg.no/lookup/?startswith=${orgnr}`}
@@ -736,10 +1000,14 @@ function CompanyDetailPanel({
             </div>
           ) : company ? (
             <button
-              onClick={() => onAdd(company)}
+              onClick={() => onAdd(company, foreslatteKontakter)}
               className="w-full px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors"
             >
-              <Plus className="w-4 h-4" /> Legg til ringeliste
+              <Plus className="w-4 h-4" />
+              Legg til ringeliste
+              {foreslatteKontakter.length > 0 && (
+                <span className="text-xs opacity-90">— {foreslatteKontakter[0].navn.split(' ')[0]}</span>
+              )}
             </button>
           ) : null}
         </div>
@@ -1103,10 +1371,15 @@ function ProspektSok() {
     setSelected(new Set())
   }
 
-  const addToRingeliste = async (company: Company) => {
+  // Insert into ringeliste. If `kontakter` is provided we save the top one as
+  // the primary contact + the full list as JSON for later kundekort-creation.
+  // If `kontakter` is omitted (e.g. from bulk-add to keep things fast), the
+  // contact data is left null — slide-in / kundekort can enrich it later.
+  const addToRingeliste = async (company: Company, kontakter?: Kontaktperson[]) => {
     setAdding(prev => new Set([...prev, company.orgnr]))
     try {
-      await supabase.from('ringeliste').insert({
+      const top = kontakter && kontakter.length > 0 ? kontakter[0] : null
+      const insert: Record<string, unknown> = {
         bedriftsnavn: company.navn,
         orgnr: company.orgnr,
         bransje_kode: company.bransjeKode,
@@ -1118,7 +1391,33 @@ function ProspektSok() {
         mva_registrert: company.mvaRegistrert,
         kilde: 'brreg',
         stage: 'ny_lead',
-      })
+      }
+      if (top) {
+        insert.kontaktperson_navn = top.navn
+        insert.kontaktperson_rolle = top.rolle
+      }
+      if (kontakter && kontakter.length > 0) {
+        insert.kontaktpersoner = kontakter
+      }
+
+      const { error } = await supabase.from('ringeliste').insert(insert)
+      // If the new columns don't exist yet (migration not run), retry without them.
+      if (error && /kontaktperson|kontaktpersoner/i.test(error.message)) {
+        await supabase.from('ringeliste').insert({
+          bedriftsnavn: insert.bedriftsnavn,
+          orgnr: insert.orgnr,
+          bransje_kode: insert.bransje_kode,
+          bransje_navn: insert.bransje_navn,
+          kommune: insert.kommune,
+          kommunenummer: insert.kommunenummer,
+          ansatte: insert.ansatte,
+          registrert_dato: insert.registrert_dato,
+          mva_registrert: insert.mva_registrert,
+          kilde: insert.kilde,
+          stage: insert.stage,
+        })
+      }
+
       // Also upsert into prospekter
       await supabase.from('prospekter').upsert({
         orgnr: company.orgnr,
@@ -1139,9 +1438,20 @@ function ProspektSok() {
 
   const addBulkToRingeliste = async () => {
     const companies = displayItems.filter(c => selected.has(c.orgnr) && !ringeliste.has(c.orgnr) && !kunder.has(c.orgnr))
-    for (const company of companies) {
-      await addToRingeliste(company)
+    // Run with limited concurrency: each `addToRingeliste` call also fetches kontakter
+    // (3 Brreg API calls). 3 workers in parallel keeps things responsive without
+    // hammering Brreg.
+    const CONCURRENCY = 3
+    const queue = [...companies]
+    const worker = async () => {
+      while (queue.length) {
+        const c = queue.shift()
+        if (!c) break
+        const res = await fetchKontaktpersoner(c.orgnr).catch(() => ({ kontakter: [] as Kontaktperson[] }))
+        await addToRingeliste(c, res.kontakter.slice(0, 3))
+      }
     }
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker))
     setSelected(new Set())
   }
 
@@ -1579,7 +1889,7 @@ function ProspektSok() {
         <CompanyDetailPanel
           orgnr={selectedOrgnr}
           onClose={() => setSelectedOrgnr(null)}
-          onAdd={(company) => { addToRingeliste(company); setSelectedOrgnr(null) }}
+          onAdd={(company, kontakter) => { addToRingeliste(company, kontakter); setSelectedOrgnr(null) }}
           inRingeliste={ringeliste.has(selectedOrgnr)}
           isKunde={kunder.has(selectedOrgnr)}
         />
@@ -1667,10 +1977,11 @@ function NyregistrerteTab() {
     }
   }
 
-  const addToRingeliste = async (row: any) => {
+  const addToRingeliste = async (row: any, kontakter?: Kontaktperson[]) => {
     setAdding(prev => new Set([...prev, row.orgnr]))
     try {
-      await supabase.from('ringeliste').insert({
+      const top = kontakter && kontakter.length > 0 ? kontakter[0] : null
+      const insert: Record<string, unknown> = {
         bedriftsnavn: row.navn,
         orgnr: row.orgnr,
         bransje_kode: row.bransje_kode,
@@ -1682,7 +1993,30 @@ function NyregistrerteTab() {
         mva_registrert: row.mva_registrert,
         kilde: 'brreg',
         stage: 'ny_lead',
-      })
+      }
+      if (top) {
+        insert.kontaktperson_navn = top.navn
+        insert.kontaktperson_rolle = top.rolle
+      }
+      if (kontakter && kontakter.length > 0) {
+        insert.kontaktpersoner = kontakter
+      }
+      const { error } = await supabase.from('ringeliste').insert(insert)
+      if (error && /kontaktperson|kontaktpersoner/i.test(error.message)) {
+        await supabase.from('ringeliste').insert({
+          bedriftsnavn: insert.bedriftsnavn,
+          orgnr: insert.orgnr,
+          bransje_kode: insert.bransje_kode,
+          bransje_navn: insert.bransje_navn,
+          kommune: insert.kommune,
+          kommunenummer: insert.kommunenummer,
+          ansatte: insert.ansatte,
+          registrert_dato: insert.registrert_dato,
+          mva_registrert: insert.mva_registrert,
+          kilde: insert.kilde,
+          stage: insert.stage,
+        })
+      }
       setRingeliste(prev => new Set([...prev, row.orgnr]))
     } catch {
       // ignore
@@ -1693,7 +2027,17 @@ function NyregistrerteTab() {
 
   const addBulkToRingeliste = async () => {
     const companies = rows.filter(r => selected.has(r.orgnr) && !ringeliste.has(r.orgnr) && !kunder.has(r.orgnr))
-    for (const row of companies) await addToRingeliste(row)
+    const CONCURRENCY = 3
+    const queue = [...companies]
+    const worker = async () => {
+      while (queue.length) {
+        const r = queue.shift()
+        if (!r) break
+        const res = await fetchKontaktpersoner(r.orgnr).catch(() => ({ kontakter: [] as Kontaktperson[] }))
+        await addToRingeliste(r, res.kontakter.slice(0, 3))
+      }
+    }
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker))
     setSelected(new Set())
   }
 
@@ -1908,7 +2252,23 @@ function NyregistrerteTab() {
         <CompanyDetailPanel
           orgnr={selectedOrgnr}
           onClose={() => setSelectedOrgnr(null)}
-          onAdd={(company) => { addToRingeliste(company); setSelectedOrgnr(null) }}
+          onAdd={(company, kontakter) => {
+            // For nyregistrerte, the "row" object has different field names than Company.
+            // Build a synthetic row from the Company object.
+            const row = {
+              orgnr: company.orgnr,
+              navn: company.navn,
+              bransje_kode: company.bransjeKode,
+              bransje_navn: company.bransjeNavn,
+              kommune: company.kommune,
+              kommunenummer: company.kommunenummer,
+              ansatte: company.ansatte,
+              registrert_dato: company.registrertDato,
+              mva_registrert: company.mvaRegistrert,
+            }
+            addToRingeliste(row, kontakter)
+            setSelectedOrgnr(null)
+          }}
           inRingeliste={ringeliste.has(selectedOrgnr)}
           isKunde={kunder.has(selectedOrgnr)}
         />
