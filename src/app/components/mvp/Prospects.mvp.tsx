@@ -424,9 +424,11 @@ async function searchBrreg(params: SearchParams): Promise<BrregResult> {
 function BransjeCombobox({
   selected,
   onChange,
+  counts,
 }: {
   selected: string[]
   onChange: (koder: string[]) => void
+  counts?: Record<string, number>  // bransje code (or prefix) → number of matching companies
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -524,7 +526,13 @@ function BransjeCombobox({
                       {selected.includes(k.kode) && '✓'}
                     </span>
                     <span className="flex-1 truncate">{k.navn}</span>
-                    <span className="text-xs text-slate-400 dark:text-slate-500">{k.kode}</span>
+                    <span className={`text-xs tabular-nums ${
+                      counts && (counts[k.kode] ?? 0) > 0
+                        ? 'text-slate-500 dark:text-slate-400 font-medium'
+                        : 'text-slate-300 dark:text-slate-600'
+                    }`}>
+                      {counts ? (counts[k.kode] ?? 0).toLocaleString('nb') : k.kode}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -631,9 +639,11 @@ async function loadGrupperFromSupabase() {
 function KommuneCombobox({
   selected,
   onChange,
+  counts,
 }: {
   selected: string[]
   onChange: (nr: string[]) => void
+  counts?: Record<string, number>  // kommunenummer → number of matching companies
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -756,6 +766,13 @@ function KommuneCombobox({
                     <CheckBox checked={selected.includes(k.nr)} />
                     <span className="flex-1">{k.navn}</span>
                     <span className="text-xs text-slate-400">{getFylke(k.nr)}</span>
+                    {counts && (
+                      <span className={`text-xs tabular-nums ${
+                        (counts[k.nr] ?? 0) > 0 ? 'text-slate-500 dark:text-slate-400 font-medium' : 'text-slate-300 dark:text-slate-600'
+                      }`}>
+                        {(counts[k.nr] ?? 0).toLocaleString('nb')}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -793,7 +810,14 @@ function KommuneCombobox({
                             selected.includes(k.nr) ? 'text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-900/10' : 'text-slate-700 dark:text-slate-300'
                           }`}>
                           <CheckBox checked={selected.includes(k.nr)} />
-                          {k.navn}
+                          <span className="flex-1">{k.navn}</span>
+                          {counts && (
+                            <span className={`text-xs tabular-nums ${
+                              (counts[k.nr] ?? 0) > 0 ? 'text-slate-500 dark:text-slate-400 font-medium' : 'text-slate-300 dark:text-slate-600'
+                            }`}>
+                              {(counts[k.nr] ?? 0).toLocaleString('nb')}
+                            </span>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -2015,6 +2039,10 @@ function NyregistrerteTab() {
   const [sortField, setSortField] = useState<SortField>('registrert_dato')
   const [sortAsc, setSortAsc] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Live counts for the bransje + kommune dropdowns so the user sees how many
+  // companies match each option under the OTHER currently active filters.
+  const [bransjeCounts, setBransjeCounts] = useState<Record<string, number>>({})
+  const [kommuneCounts, setKommuneCounts] = useState<Record<string, number>>({})
   const [ringeliste, setRingeliste] = useState<Set<string>>(new Set())
   const [kunder, setKunder] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState<Set<string>>(new Set())
@@ -2056,6 +2084,60 @@ function NyregistrerteTab() {
   }, [period, bransjer, kommuner, harHjemmeside, harTelefon, harEpost, sortField, sortAsc])
 
   useEffect(() => { loadNyregistrerte() }, [loadNyregistrerte])
+
+  // Recompute bransje + kommune counts whenever filters change. Each query
+  // EXCLUDES the corresponding selector's own filter, so the count shows
+  // "how many companies would I add if I picked this one too".
+  useEffect(() => {
+    const fromDate = period !== null
+      ? new Date(Date.now() - period * 86400000).toISOString().slice(0, 10)
+      : null
+
+    const applyShared = <T extends { gte: any; in: any; not: any; or: any }>(q: T): T => {
+      let r: any = q
+      if (fromDate) r = r.gte('registrert_dato', fromDate)
+      if (harHjemmeside) r = r.not('hjemmeside', 'is', null)
+      if (harTelefon)    r = r.or('telefon.not.is.null,mobil.not.is.null')
+      if (harEpost)      r = r.not('epost', 'is', null)
+      return r
+    }
+
+    // Bransje counts: keep kommune filter, drop bransje filter
+    let q1: any = supabase.from('nyregistrerte').select('bransje_kode')
+    q1 = applyShared(q1)
+    if (kommuner.length) q1 = q1.in('kommunenummer', kommuner)
+
+    q1.limit(50000).then(({ data }: { data: any[] | null }) => {
+      const counts: Record<string, number> = {}
+      const koderList = BRANSJER.flatMap(g => g.koder.map(k => k.kode))
+      for (const r of data || []) {
+        const code: string | null = r.bransje_kode
+        if (!code) continue
+        // A row with naeringskode "47.110" matches the parent prefix "47" — count under both.
+        for (const k of koderList) {
+          if (code === k || code.startsWith(k + '.') || code.startsWith(k)) {
+            counts[k] = (counts[k] || 0) + 1
+          }
+        }
+      }
+      setBransjeCounts(counts)
+    })
+
+    // Kommune counts: keep bransje filter, drop kommune filter
+    let q2: any = supabase.from('nyregistrerte').select('kommunenummer')
+    q2 = applyShared(q2)
+    if (bransjer.length) q2 = q2.in('bransje_kode', bransjer)
+
+    q2.limit(50000).then(({ data }: { data: any[] | null }) => {
+      const counts: Record<string, number> = {}
+      for (const r of data || []) {
+        const nr: string | null = r.kommunenummer
+        if (!nr) continue
+        counts[nr] = (counts[nr] || 0) + 1
+      }
+      setKommuneCounts(counts)
+    })
+  }, [period, bransjer, kommuner, harHjemmeside, harTelefon, harEpost])
 
   const handleSync = async () => {
     setSyncing(true)
@@ -2218,7 +2300,7 @@ function NyregistrerteTab() {
           <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
             Bransje
           </label>
-          <BransjeCombobox selected={bransjer} onChange={setBransjer} />
+          <BransjeCombobox selected={bransjer} onChange={setBransjer} counts={bransjeCounts} />
         </div>
 
         {/* Kommune */}
@@ -2226,7 +2308,7 @@ function NyregistrerteTab() {
           <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
             Kommune
           </label>
-          <KommuneCombobox selected={kommuner} onChange={setKommuner} />
+          <KommuneCombobox selected={kommuner} onChange={setKommuner} counts={kommuneCounts} />
         </div>
 
         {/* Kontaktinfo tilgjengelig */}
