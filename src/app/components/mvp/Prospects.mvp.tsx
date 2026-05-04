@@ -543,7 +543,7 @@ function BransjeCombobox({
                     key={k.kode}
                     type="button"
                     onClick={() => toggle(k.kode)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-white dark:hover:bg-slate-800 transition-colors ${
                       selected.includes(k.kode) ? 'text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-700 dark:text-slate-300'
                     }`}
                   >
@@ -789,7 +789,7 @@ function KommuneCombobox({
                   <div className="px-3 py-3 text-xs text-slate-400">Ingen treff</div>
                 ) : searchResults.map(k => (
                   <button key={k.nr} type="button" onClick={() => toggle(k.nr)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-white dark:hover:bg-slate-800 transition-colors ${
                       selected.includes(k.nr) ? 'text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'
                     }`}>
                     <CheckBox checked={selected.includes(k.nr)} />
@@ -835,7 +835,7 @@ function KommuneCombobox({
                       {/* Communes */}
                       {!collapsed && koms.map(k => (
                         <button key={k.nr} type="button" onClick={() => toggle(k.nr)}
-                          className={`w-full flex items-center gap-2 pl-7 pr-3 py-1.5 text-sm text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
+                          className={`w-full flex items-center gap-2 pl-7 pr-3 py-1.5 text-sm text-left hover:bg-white dark:hover:bg-slate-800 transition-colors ${
                             selected.includes(k.nr) ? 'text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-900/10' : 'text-slate-700 dark:text-slate-300'
                           }`}>
                           <CheckBox checked={selected.includes(k.nr)} />
@@ -1164,7 +1164,7 @@ function ResultRow({
   return (
     <tr
       onClick={onRowClick}
-      className={`border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer ${
+      className={`border-b border-slate-100 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer ${
         checked ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-l-blue-500' : ''
       }`}
     >
@@ -1874,7 +1874,7 @@ function ProspektSok() {
           {!loading && hasSearched && displayItems.length > 0 && (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 sticky top-0">
+                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 sticky top-0">
                   <th className="pl-4 pr-2 py-3 w-10" />
                   <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
                     Bedriftsnavn
@@ -1896,7 +1896,7 @@ function ProspektSok() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-100 dark:divide-slate-700/50">
+              <tbody className="bg-slate-100 dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
                 {displayItems.map(company => (
                   <ResultRow
                     key={company.orgnr}
@@ -1973,7 +1973,7 @@ function ProspektSok() {
                 <button
                   onClick={() => goToPage(page - 1)}
                   disabled={page === 0 || loading}
-                  className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
@@ -1987,7 +1987,7 @@ function ProspektSok() {
                       className={`w-8 h-8 text-xs rounded border transition-colors ${
                         pg === page
                           ? 'bg-blue-600 border-blue-600 text-white font-semibold'
-                          : 'border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40'
+                          : 'border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 disabled:opacity-40'
                       }`}
                     >
                       {pg + 1}
@@ -1997,7 +1997,7 @@ function ProspektSok() {
                 <button
                   onClick={() => goToPage(page + 1)}
                   disabled={(exhausted && page >= totalPages - 1) || loading}
-                  className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -2469,7 +2469,7 @@ function NyregistrerteTab() {
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-100 dark:divide-slate-700/50">
+            <tbody className="bg-slate-100 dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
               {rows.map(row => {
                 const checked = selected.has(row.orgnr)
                 const inRL = ringeliste.has(row.orgnr)
@@ -2478,7 +2478,7 @@ function NyregistrerteTab() {
                   <tr
                     key={row.orgnr}
                     onClick={() => setSelectedOrgnr(row.orgnr)}
-                    className={`hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer ${
+                    className={`hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer ${
                       checked ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-l-blue-500' : ''
                     }`}
                   >
@@ -2570,7 +2570,7 @@ function NyregistrerteTab() {
                 <button
                   onClick={() => setPage(Math.max(0, page - 1))}
                   disabled={page === 0 || loading}
-                  className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
@@ -2580,7 +2580,7 @@ function NyregistrerteTab() {
                 <button
                   onClick={() => setPage(page + 1)}
                   disabled={(page + 1) * pageSize >= totalCount || loading}
-                  className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
