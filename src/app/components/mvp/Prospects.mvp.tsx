@@ -876,10 +876,14 @@ function ProspektSok() {
   // Result accumulator (across multiple Brreg pages).
   //
   // Brreg's search API doesn't support filtering on contact info (hjemmeside,
-  // telefon, epost), so we always fetch a moderately large page from Brreg and
-  // paginate locally. Brreg supports up to size=10000; size=500 hits a sweet
-  // spot of ~250ms latency for 800 KB transfer.
-  const BRREG_FETCH_SIZE = 500
+  // telefon, epost), so we fetch a big chunk from Brreg in one go and paginate
+  // locally. size=10000 (Brreg's max) → ~16 MB / ~830 ms per call, but for
+  // typical queries everything fits in the very first call and all subsequent
+  // pagination is instant. Memory: ~5 MB per chunk as JS objects — fine.
+  const BRREG_FETCH_SIZE = 10000
+  // If, after applying the contact-info filter, we have fewer than this many
+  // matches and there are more Brreg pages available, fetch another chunk.
+  const MIN_FILTERED_BEFORE_FETCH_MORE = 100
   const [buffer, setBuffer] = useState<Company[]>([])
   const [brregNextPage, setBrregNextPage] = useState(0)
   const [brregTotal, setBrregTotal] = useState(0)
@@ -1028,10 +1032,10 @@ function ProspektSok() {
   // Brreg again when we run out.
   const localTotalPages = Math.max(1, Math.ceil(buffer.length / pageSize))
 
-  // Soft cap on auto-fetching. Each fetch grabs BRREG_FETCH_SIZE (500) records,
-  // so 5 fetches = 2500 records scanned before we ask the user to confirm
-  // scanning more.
-  const AUTO_FETCH_CAP_PAGES = 5
+  // Soft cap on auto-fetching. Each fetch grabs BRREG_FETCH_SIZE (10 000)
+  // records, so 3 fetches = 30 000 records scanned before we ask the user
+  // to confirm scanning more.
+  const AUTO_FETCH_CAP_PAGES = 3
   const [extraPagesAllowed, setExtraPagesAllowed] = useState(0)
   const fetchCap = AUTO_FETCH_CAP_PAGES + extraPagesAllowed
   const cappedByUser = brregNextPage >= fetchCap && !exhausted && (
@@ -1053,7 +1057,7 @@ function ProspektSok() {
 
     const needed = (page + 2) * pageSize  // current page + one extra so "Next" is responsive
     const haveEnough = hasContactFilter
-      ? filteredItems.length >= needed
+      ? (filteredItems.length >= needed && filteredItems.length >= MIN_FILTERED_BEFORE_FETCH_MORE)
       : buffer.length >= needed
     if (haveEnough) return
 
