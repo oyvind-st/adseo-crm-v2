@@ -300,9 +300,37 @@ function BransjeCombobox({
 }
 
 // ─────────────────────────────────────────────
-// Sub-component: KommuneCombobox
 // ─────────────────────────────────────────────
-// Kommuner loaded dynamically from Brreg
+// Sub-component: KommuneCombobox (with fylke grouping)
+// ─────────────────────────────────────────────
+
+// Fylke mapping: first 2 digits of kommunenummer → fylkenavn
+const FYLKE_NAVN: Record<string, string> = {
+  '03': 'Oslo',
+  '11': 'Rogaland',
+  '15': 'Møre og Romsdal',
+  '18': 'Nordland',
+  '21': 'Svalbard',
+  '31': 'Østfold',
+  '32': 'Akershus',
+  '33': 'Buskerud',
+  '34': 'Innlandet',
+  '39': 'Vestfold',
+  '40': 'Telemark',
+  '42': 'Agder',
+  '46': 'Vestland',
+  '50': 'Trøndelag',
+  '55': 'Troms',
+  '56': 'Finnmark',
+}
+
+// Fylke sort order (south to north, roughly)
+const FYLKE_ORDER = ['03','31','32','33','39','40','42','34','11','46','15','50','18','55','56','21']
+
+function getFylke(nr: string) {
+  return FYLKE_NAVN[nr.slice(0, 2)] || 'Andre'
+}
+
 let _kommunerCache: { nr: string; navn: string }[] | null = null
 
 async function loadKommuner() {
@@ -316,9 +344,7 @@ async function loadKommuner() {
       .map((k: any) => ({ nr: k.nummer, navn: k.navn }))
       .sort((a: any, b: any) => a.navn.localeCompare(b.navn, 'nb'))
     return _kommunerCache
-  } catch {
-    return []
-  }
+  } catch { return [] }
 }
 
 function KommuneCombobox({
@@ -331,29 +357,63 @@ function KommuneCombobox({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [kommuner, setKommuner] = useState<{ nr: string; navn: string }[]>([])
+  const [collapsedFylker, setCollapsedFylker] = useState<Set<string>>(new Set())
   const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    loadKommuner().then(setKommuner)
-  }, [])
+  useEffect(() => { loadKommuner().then(setKommuner) }, [])
 
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
+    const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const filtered = kommuner.filter(k =>
+  const toggle = (nr: string) =>
+    onChange(selected.includes(nr) ? selected.filter(k => k !== nr) : [...selected, nr])
+
+  const toggleFylke = (fylkenavn: string, kommunerInFylke: { nr: string; navn: string }[]) => {
+    const nrs = kommunerInFylke.map(k => k.nr)
+    const allSelected = nrs.every(nr => selected.includes(nr))
+    if (allSelected) onChange(selected.filter(nr => !nrs.includes(nr)))
+    else onChange([...new Set([...selected, ...nrs])])
+  }
+
+  const toggleCollapse = (fylke: string) => {
+    setCollapsedFylker(prev => {
+      const s = new Set(prev)
+      if (s.has(fylke)) s.delete(fylke)
+      else s.add(fylke)
+      return s
+    })
+  }
+
+  // Group by fylke
+  const grouped = FYLKE_ORDER.map(kode => {
+    const navn = FYLKE_NAVN[kode]
+    const koms = kommuner.filter(k => k.nr.slice(0, 2) === kode)
+    return { kode, navn, kommuner: koms }
+  }).filter(g => g.kommuner.length > 0)
+
+  // Searching: flat list across all fylker
+  const isSearching = query.trim().length > 0
+  const searchResults = kommuner.filter(k =>
     k.navn.toLowerCase().includes(query.toLowerCase()) || k.nr.includes(query)
   )
 
-  const toggle = (nr: string) => {
-    onChange(selected.includes(nr) ? selected.filter(k => k !== nr) : [...selected, nr])
-  }
-
   const selectedNames = selected.map(nr => kommuner.find(k => k.nr === nr)?.navn || nr)
+  const selectedCount = selected.length
+
+  const CheckBox = ({ checked, partial }: { checked: boolean; partial?: boolean }) => (
+    <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center text-xs ${
+      checked ? 'bg-blue-600 border-blue-600 text-white'
+      : partial ? 'bg-blue-100 border-blue-400 text-blue-600'
+      : 'border-slate-300 dark:border-slate-500'
+    }`}>
+      {checked ? '✓' : partial ? '–' : ''}
+    </span>
+  )
 
   return (
     <div className="relative" ref={ref}>
@@ -363,43 +423,104 @@ function KommuneCombobox({
         className="w-full flex items-center justify-between px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-left hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
       >
         <span className="text-slate-600 dark:text-slate-300 truncate">
-          {selected.length === 0 ? 'Alle kommuner' : selectedNames.join(', ')}
+          {selectedCount === 0 ? 'Alle kommuner' :
+           selectedCount === 1 ? selectedNames[0] :
+           `${selectedCount} kommuner valgt`}
         </span>
-        <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0 ml-1" />
+        <div className="flex items-center gap-1 flex-shrink-0 ml-1">
+          {selectedCount > 0 && (
+            <span className="bg-blue-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+              {selectedCount > 9 ? '9+' : selectedCount}
+            </span>
+          )}
+          <ChevronDown className="w-4 h-4 text-slate-400" />
+        </div>
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg max-h-56 overflow-y-auto">
-          <div className="p-2 border-b border-slate-100 dark:border-slate-700">
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-xl max-h-72 overflow-hidden flex flex-col">
+          {/* Search */}
+          <div className="p-2 border-b border-slate-100 dark:border-slate-700 flex-shrink-0">
             <input
               autoFocus
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Søk kommune..."
+              placeholder="Søk kommune eller fylke..."
               className="w-full px-2 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
-          <div className="py-1">
-            {filtered.map(k => (
-              <button
-                key={k.nr}
-                type="button"
-                onClick={() => toggle(k.nr)}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
-                  selected.includes(k.nr) ? 'text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-700 dark:text-slate-300'
-                }`}
-              >
-                <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center text-xs ${
-                  selected.includes(k.nr)
-                    ? 'bg-blue-600 border-blue-600 text-white'
-                    : 'border-slate-300 dark:border-slate-500'
-                }`}>
-                  {selected.includes(k.nr) && '✓'}
-                </span>
-                {k.navn}
+
+          {/* Clear button */}
+          {selectedCount > 0 && (
+            <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-700 flex-shrink-0">
+              <button onClick={() => onChange([])} className="text-xs text-red-500 hover:text-red-700">
+                Fjern alle ({selectedCount})
               </button>
-            ))}
+            </div>
+          )}
+
+          <div className="overflow-y-auto flex-1">
+            {kommuner.length === 0 ? (
+              <div className="px-3 py-4 text-xs text-slate-400 text-center">Laster kommuner...</div>
+            ) : isSearching ? (
+              // Flat search results
+              <div className="py-1">
+                {searchResults.length === 0 ? (
+                  <div className="px-3 py-3 text-xs text-slate-400">Ingen treff</div>
+                ) : searchResults.map(k => (
+                  <button key={k.nr} type="button" onClick={() => toggle(k.nr)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
+                      selected.includes(k.nr) ? 'text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'
+                    }`}>
+                    <CheckBox checked={selected.includes(k.nr)} />
+                    <span className="flex-1">{k.navn}</span>
+                    <span className="text-xs text-slate-400">{getFylke(k.nr)}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              // Grouped by fylke
+              <div className="py-1">
+                {grouped.map(({ kode, navn: fylkenavn, kommuner: koms }) => {
+                  const selectedInFylke = koms.filter(k => selected.includes(k.nr)).length
+                  const allInFylke = selectedInFylke === koms.length
+                  const someInFylke = selectedInFylke > 0 && !allInFylke
+                  const collapsed = collapsedFylker.has(kode)
+                  return (
+                    <div key={kode}>
+                      {/* Fylke header */}
+                      <div className="flex items-center gap-1 px-2 py-1 bg-slate-50 dark:bg-slate-700/50 sticky top-0 z-10">
+                        <button type="button" onClick={() => toggleFylke(fylkenavn, koms)}
+                          className="flex items-center gap-2 flex-1 text-left">
+                          <CheckBox checked={allInFylke} partial={someInFylke} />
+                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                            {fylkenavn}
+                          </span>
+                          {selectedInFylke > 0 && (
+                            <span className="text-xs text-blue-600 dark:text-blue-400">({selectedInFylke}/{koms.length})</span>
+                          )}
+                        </button>
+                        <button type="button" onClick={() => toggleCollapse(kode)}
+                          className="p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+                        </button>
+                      </div>
+                      {/* Communes */}
+                      {!collapsed && koms.map(k => (
+                        <button key={k.nr} type="button" onClick={() => toggle(k.nr)}
+                          className={`w-full flex items-center gap-2 pl-7 pr-3 py-1.5 text-sm text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
+                            selected.includes(k.nr) ? 'text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-900/10' : 'text-slate-700 dark:text-slate-300'
+                          }`}>
+                          <CheckBox checked={selected.includes(k.nr)} />
+                          {k.navn}
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
