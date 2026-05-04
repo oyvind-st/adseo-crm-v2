@@ -10,6 +10,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
 import { useCurrentUser } from '../../contexts/UserContext'
 
+type Profile = { id: string; navn: string }
+
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
@@ -867,18 +869,23 @@ function KommuneCombobox({
 // Sub-component: CompanyDetailPanel
 // ─────────────────────────────────────────────
 function CompanyDetailPanel({
-  orgnr, onClose, onAdd, onCreateKunde, inRingeliste, isKunde
+  orgnr, onClose, onAdd, onCreateKunde, inRingeliste, isKunde, profiles = [], currentUserId
 }: {
   orgnr: string
   onClose: () => void
-  onAdd: (c: Company, kontakter: Kontaktperson[]) => void
+  onAdd: (c: Company, kontakter: Kontaktperson[], tildeltBrukerId?: string | null) => void
   onCreateKunde?: (c: Company, kontakter: Kontaktperson[]) => Promise<string | null>
   inRingeliste: boolean
   isKunde: boolean
+  profiles?: Profile[]
+  currentUserId?: string | null
 }) {
   const navigate = useNavigate()
   const [opprettetKundeId, setOpprettetKundeId] = useState<string | null>(null)
   const [oppretter, setOppretter] = useState(false)
+  const [lagtTilFeedback, setLagtTilFeedback] = useState<string | null>(null)
+  const [selectedAssignee, setSelectedAssignee] = useState<string>(currentUserId || '')
+  useEffect(() => { if (currentUserId) setSelectedAssignee(currentUserId) }, [currentUserId])
   const handleOpprett = async () => {
     if (!company || !onCreateKunde) return
     setOppretter(true)
@@ -888,6 +895,14 @@ function CompanyDetailPanel({
     } finally {
       setOppretter(false)
     }
+  }
+  const handleLeggTil = () => {
+    if (!company) return
+    onAdd(company, foreslatteKontakter, selectedAssignee || null)
+    const eierNavn = selectedAssignee
+      ? (profiles.find(p => p.id === selectedAssignee)?.navn || 'valgt bruker')
+      : 'ingen'
+    setLagtTilFeedback('Lagt til ringeliste — tildelt: ' + eierNavn)
   }
   const [company, setCompany] = useState<Company | null>(null)
   const [loading, setLoading] = useState(true)
@@ -1185,8 +1200,25 @@ function CompanyDetailPanel({
             </div>
           ) : company ? (
             <div className="space-y-2">
+              {profiles.length > 0 && (
+                <div>
+                  <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Tildel til</label>
+                  <select
+                    value={selectedAssignee}
+                    onChange={e => setSelectedAssignee(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-slate-800 dark:text-slate-100"
+                  >
+                    <option value="">Ingen tildelt</option>
+                    {profiles.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.navn}{p.id === currentUserId ? ' (meg)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <button
-                onClick={() => onAdd(company, foreslatteKontakter)}
+                onClick={handleLeggTil}
                 className="w-full px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors"
               >
                 <Plus className="w-4 h-4" />
@@ -1195,6 +1227,11 @@ function CompanyDetailPanel({
                   <span className="text-xs opacity-90">— {foreslatteKontakter[0].navn.split(' ')[0]}</span>
                 )}
               </button>
+              {lagtTilFeedback && (
+                <div className="text-xs text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded px-3 py-2 flex items-center gap-2">
+                  <CheckCircle className="w-3 h-3" /> {lagtTilFeedback}
+                </div>
+              )}
               {onCreateKunde && (
                 <button
                   onClick={handleOpprett}
@@ -1585,10 +1622,11 @@ function ProspektSok() {
   // the primary contact + the full list as JSON for later kundekort-creation.
   // If `kontakter` is omitted (e.g. from bulk-add to keep things fast), the
   // contact data is left null — slide-in / kundekort can enrich it later.
-  const addToRingeliste = async (company: Company, kontakter?: Kontaktperson[]) => {
+  const addToRingeliste = async (company: Company, kontakter?: Kontaktperson[], tildeltBrukerId?: string | null) => {
     setAdding(prev => new Set([...prev, company.orgnr]))
     try {
       const top = kontakter && kontakter.length > 0 ? kontakter[0] : null
+      const eier = tildeltBrukerId !== undefined ? tildeltBrukerId : (currentUser?.id || null)
       const insert: Record<string, unknown> = {
         bedriftsnavn: company.navn,
         orgnr: company.orgnr,
@@ -1601,6 +1639,7 @@ function ProspektSok() {
         mva_registrert: company.mvaRegistrert,
         kilde: 'brreg',
         stage: 'ny_lead',
+        tildelt_bruker_id: eier,
       }
       if (top) {
         insert.kontaktperson_navn = top.navn
@@ -1611,9 +1650,8 @@ function ProspektSok() {
       }
 
       const { error } = await supabase.from('ringeliste').insert(insert)
-      // If the new columns don't exist yet (migration not run), retry without them.
-      if (error && /kontaktperson|kontaktpersoner/i.test(error.message)) {
-        await supabase.from('ringeliste').insert({
+      if (error && /kontaktperson|kontaktpersoner|tildelt_bruker_id/i.test(error.message)) {
+        const fallback: Record<string, unknown> = {
           bedriftsnavn: insert.bedriftsnavn,
           orgnr: insert.orgnr,
           bransje_kode: insert.bransje_kode,
@@ -1625,7 +1663,18 @@ function ProspektSok() {
           mva_registrert: insert.mva_registrert,
           kilde: insert.kilde,
           stage: insert.stage,
-        })
+        }
+        if (!/tildelt_bruker_id/i.test(error.message)) {
+          fallback.tildelt_bruker_id = insert.tildelt_bruker_id
+        }
+        const { error: e2 } = await supabase.from('ringeliste').insert(fallback)
+        if (e2) {
+          alert('Kunne ikke legge til i ringeliste: ' + e2.message)
+          return
+        }
+      } else if (error) {
+        alert('Kunne ikke legge til i ringeliste: ' + error.message)
+        return
       }
 
       // Also upsert into prospekter
@@ -1647,6 +1696,12 @@ function ProspektSok() {
   }
 
   const { user: currentUser } = useCurrentUser()
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  useEffect(() => {
+    supabase.from('profiles').select('id, navn').order('navn').then(({ data }) => {
+      setProfiles((data || []) as Profile[])
+    })
+  }, [])
 
   const createKundekort = async (company: Company, kontakter: Kontaktperson[]): Promise<string | null> => {
     try {
@@ -2211,10 +2266,12 @@ function ProspektSok() {
         <CompanyDetailPanel
           orgnr={selectedOrgnr}
           onClose={() => setSelectedOrgnr(null)}
-          onAdd={(company, kontakter) => { addToRingeliste(company, kontakter); setSelectedOrgnr(null) }}
+          onAdd={(company, kontakter, tildeltBrukerId) => { addToRingeliste(company, kontakter, tildeltBrukerId); setSelectedOrgnr(null) }}
           onCreateKunde={createKundekort}
           inRingeliste={ringeliste.has(selectedOrgnr)}
           isKunde={kunder.has(selectedOrgnr)}
+          profiles={profiles}
+          currentUserId={currentUser?.id || null}
         />
       )}
     </div>
@@ -2446,10 +2503,19 @@ function NyregistrerteTab() {
     }
   }
 
-  const addToRingeliste = async (row: any, kontakter?: Kontaktperson[]) => {
+  const { user: currentUser } = useCurrentUser()
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  useEffect(() => {
+    supabase.from('profiles').select('id, navn').order('navn').then(({ data }) => {
+      setProfiles((data || []) as Profile[])
+    })
+  }, [])
+
+  const addToRingeliste = async (row: any, kontakter?: Kontaktperson[], tildeltBrukerId?: string | null) => {
     setAdding(prev => new Set([...prev, row.orgnr]))
     try {
       const top = kontakter && kontakter.length > 0 ? kontakter[0] : null
+      const eier = tildeltBrukerId !== undefined ? tildeltBrukerId : (currentUser?.id || null)
       const insert: Record<string, unknown> = {
         bedriftsnavn: row.navn,
         orgnr: row.orgnr,
@@ -2462,6 +2528,7 @@ function NyregistrerteTab() {
         mva_registrert: row.mva_registrert,
         kilde: 'brreg',
         stage: 'ny_lead',
+        tildelt_bruker_id: eier,
       }
       if (top) {
         insert.kontaktperson_navn = top.navn
@@ -2471,8 +2538,8 @@ function NyregistrerteTab() {
         insert.kontaktpersoner = kontakter
       }
       const { error } = await supabase.from('ringeliste').insert(insert)
-      if (error && /kontaktperson|kontaktpersoner/i.test(error.message)) {
-        await supabase.from('ringeliste').insert({
+      if (error && /kontaktperson|kontaktpersoner|tildelt_bruker_id/i.test(error.message)) {
+        const fallback: Record<string, unknown> = {
           bedriftsnavn: insert.bedriftsnavn,
           orgnr: insert.orgnr,
           bransje_kode: insert.bransje_kode,
@@ -2484,7 +2551,18 @@ function NyregistrerteTab() {
           mva_registrert: insert.mva_registrert,
           kilde: insert.kilde,
           stage: insert.stage,
-        })
+        }
+        if (!/tildelt_bruker_id/i.test(error.message)) {
+          fallback.tildelt_bruker_id = insert.tildelt_bruker_id
+        }
+        const { error: e2 } = await supabase.from('ringeliste').insert(fallback)
+        if (e2) {
+          alert('Kunne ikke legge til i ringeliste: ' + e2.message)
+          return
+        }
+      } else if (error) {
+        alert('Kunne ikke legge til i ringeliste: ' + error.message)
+        return
       }
       setRingeliste(prev => new Set([...prev, row.orgnr]))
     } catch {
@@ -2493,8 +2571,6 @@ function NyregistrerteTab() {
       setAdding(prev => { const s = new Set(prev); s.delete(row.orgnr); return s })
     }
   }
-
-  const { user: currentUser } = useCurrentUser()
 
   const createKundekort = async (company: Company, kontakter: Kontaktperson[]): Promise<string | null> => {
     try {
@@ -2974,9 +3050,7 @@ function NyregistrerteTab() {
           orgnr={selectedOrgnr}
           onClose={() => setSelectedOrgnr(null)}
           onCreateKunde={createKundekort}
-          onAdd={(company, kontakter) => {
-            // For nyregistrerte, the "row" object has different field names than Company.
-            // Build a synthetic row from the Company object.
+          onAdd={(company, kontakter, tildeltBrukerId) => {
             const row = {
               orgnr: company.orgnr,
               navn: company.navn,
@@ -2988,11 +3062,13 @@ function NyregistrerteTab() {
               registrert_dato: company.registrertDato,
               mva_registrert: company.mvaRegistrert,
             }
-            addToRingeliste(row, kontakter)
+            addToRingeliste(row, kontakter, tildeltBrukerId)
             setSelectedOrgnr(null)
           }}
           inRingeliste={ringeliste.has(selectedOrgnr)}
           isKunde={kunder.has(selectedOrgnr)}
+          profiles={profiles}
+          currentUserId={currentUser?.id || null}
         />
       )}
     </div>

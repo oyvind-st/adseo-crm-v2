@@ -138,6 +138,8 @@ export function RingelisteMVP() {
 
   // Load ringeliste
   const loadRows = useCallback(async () => {
+    // 'min' requires user.id — skip if not loaded yet
+    if (brukerFilter === 'min' && !user?.id) return
     setLoading(true)
     let q = supabase
       .from('ringeliste')
@@ -145,7 +147,7 @@ export function RingelisteMVP() {
       .limit(500)
 
     if (brukerFilter === 'min' && user?.id) {
-      // Show rows assigned to me OR unassigned
+      // Show rows assigned to me OR unassigned (no eier ennå)
       q = q.or(`tildelt_bruker_id.eq.${user.id},tildelt_bruker_id.is.null`)
     } else if (brukerFilter !== 'alle' && brukerFilter !== 'min') {
       q = q.eq('tildelt_bruker_id', brukerFilter)
@@ -154,6 +156,7 @@ export function RingelisteMVP() {
     const { data, error } = await q
     if (error) {
       console.error('ringeliste load failed', error)
+      alert('Kunne ikke laste ringeliste: ' + error.message)
       setRows([])
     } else {
       setRows((data || []) as RingeRow[])
