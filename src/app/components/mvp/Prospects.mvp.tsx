@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Search, Filter, RefreshCw, Building2, MapPin, Users,
   Calendar, CheckCircle, Plus, ChevronLeft, ChevronRight,
-  X, ChevronDown, Zap, Globe, Phone, Mail, ExternalLink,
+  X, ChevronDown, ChevronUp, ChevronsUpDown,
+  Zap, Globe, Phone, Mail, ExternalLink,
   ArrowRight, FileText
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
@@ -1959,6 +1960,33 @@ function ProspektSok() {
 // ─────────────────────────────────────────────
 // Tab 2: Nyregistrerte
 // ─────────────────────────────────────────────
+type SortField = 'registrert_dato' | 'navn' | 'bransje_navn' | 'kommune' | 'ansatte'
+
+function SortableTh({ label, field, align = 'left', sortField, sortAsc, onSort }: {
+  label: string
+  field: SortField
+  align?: 'left' | 'right'
+  sortField: SortField
+  sortAsc: boolean
+  onSort: (f: SortField) => void
+}) {
+  const active = sortField === field
+  const Icon = active ? (sortAsc ? ChevronUp : ChevronDown) : ChevronsUpDown
+  const justify = align === 'right' ? 'justify-end' : 'justify-start'
+  return (
+    <th className={`px-3 py-3 text-${align} text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide`}>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className={`flex items-center gap-1 ${justify} w-full uppercase tracking-wide hover:text-slate-900 dark:hover:text-white transition-colors`}
+      >
+        <span>{label}</span>
+        <Icon className={`w-3 h-3 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`} />
+      </button>
+    </th>
+  )
+}
+
 function NyregistrerteTab() {
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -1967,6 +1995,14 @@ function NyregistrerteTab() {
   const [period, setPeriod] = useState<7 | 30 | 90 | null>(30)
   const [bransjer, setBransjer] = useState<string[]>([])
   const [kommuner, setKommuner] = useState<string[]>([])
+  // Contact-info filters — applied at the Supabase query level.
+  const [harHjemmeside, setHarHjemmeside] = useState(false)
+  const [harTelefon, setHarTelefon] = useState(false)
+  const [harEpost, setHarEpost] = useState(false)
+  // Sort state. Default: newest first, with orgnr as a stable tiebreaker so the
+  // order doesn't shuffle on every refresh when many rows share registrert_dato.
+  const [sortField, setSortField] = useState<SortField>('registrert_dato')
+  const [sortAsc, setSortAsc] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [ringeliste, setRingeliste] = useState<Set<string>>(new Set())
   const [kunder, setKunder] = useState<Set<string>>(new Set())
@@ -1986,23 +2022,27 @@ function NyregistrerteTab() {
 
   const loadNyregistrerte = useCallback(async () => {
     setLoading(true)
-    let query = supabase.from('nyregistrerte').select('*').order('registrert_dato', { ascending: false })
+    // Sort by the user's chosen field, then ALWAYS by orgnr ascending as a
+    // tiebreaker so two rows with identical registrert_dato don't swap places
+    // between refreshes.
+    let query = supabase.from('nyregistrerte').select('*')
+      .order(sortField, { ascending: sortAsc, nullsFirst: false })
+      .order('orgnr', { ascending: true })
 
     if (period !== null) {
       const from = new Date(Date.now() - period * 86400000).toISOString().slice(0, 10)
       query = query.gte('registrert_dato', from)
     }
-    if (bransjer.length) {
-      query = query.in('bransje_kode', bransjer)
-    }
-    if (kommuner.length) {
-      query = query.in('kommunenummer', kommuner)
-    }
+    if (bransjer.length) query = query.in('bransje_kode', bransjer)
+    if (kommuner.length) query = query.in('kommunenummer', kommuner)
+    if (harHjemmeside)   query = query.not('hjemmeside', 'is', null)
+    if (harTelefon)      query = query.or('telefon.not.is.null,mobil.not.is.null')
+    if (harEpost)        query = query.not('epost', 'is', null)
 
     const { data } = await query.limit(200)
     setRows(data || [])
     setLoading(false)
-  }, [period, bransjer, kommuner])
+  }, [period, bransjer, kommuner, harHjemmeside, harTelefon, harEpost, sortField, sortAsc])
 
   useEffect(() => { loadNyregistrerte() }, [loadNyregistrerte])
 
@@ -2019,7 +2059,9 @@ function NyregistrerteTab() {
         bransje_kode: e.bransjeKode, bransje_navn: e.bransjeNavn,
         kommune: e.kommune, kommunenummer: e.kommunenummer,
         ansatte: e.ansatte, registrert_dato: e.registrertDato,
-        mva_registrert: e.mvaRegistrert, hentet_dato: new Date().toISOString(),
+        mva_registrert: e.mvaRegistrert,
+        hjemmeside: e.hjemmeside, telefon: e.telefon, mobil: e.mobil, epost: e.epost,
+        hentet_dato: new Date().toISOString(),
       }))
       await supabase.from('nyregistrerte').upsert(fetchedRows, { onConflict: 'orgnr' })
       await supabase.from('brreg_sync').upsert(
@@ -2162,6 +2204,33 @@ function NyregistrerteTab() {
         </button>
       </div>
 
+      {/* Contact-info filter row */}
+      <div className="flex items-center flex-wrap gap-4 px-1">
+        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+          Kontaktinfo tilgjengelig:
+        </span>
+        {[
+          { label: 'Hjemmeside', val: harHjemmeside, set: setHarHjemmeside, icon: <Globe className="w-3.5 h-3.5 text-blue-400" /> },
+          { label: 'Telefon',    val: harTelefon,    set: setHarTelefon,    icon: <Phone className="w-3.5 h-3.5 text-green-400" /> },
+          { label: 'E-post',     val: harEpost,      set: setHarEpost,      icon: <Mail  className="w-3.5 h-3.5 text-purple-400" /> },
+        ].map(({ label, val, set, icon }) => (
+          <label key={label} className="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked={val} onChange={e => set(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+            {icon}
+            <span className="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{label}</span>
+          </label>
+        ))}
+        {(harHjemmeside || harTelefon || harEpost) && (
+          <button
+            onClick={() => { setHarHjemmeside(false); setHarTelefon(false); setHarEpost(false) }}
+            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            Nullstill
+          </button>
+        )}
+      </div>
+
       {/* Bulk action bar */}
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-3">
@@ -2208,21 +2277,11 @@ function NyregistrerteTab() {
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
                 <th className="pl-4 pr-2 py-3 w-10" />
-                <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
-                  Bedriftsnavn
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
-                  Bransje
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
-                  Kommune
-                </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
-                  Ans.
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
-                  Reg.dato
-                </th>
+                <SortableTh label="Bedriftsnavn" field="navn"          sortField={sortField} sortAsc={sortAsc} onSort={f => { if (f === sortField) setSortAsc(!sortAsc); else { setSortField(f); setSortAsc(true) } }} />
+                <SortableTh label="Bransje"      field="bransje_navn"  sortField={sortField} sortAsc={sortAsc} onSort={f => { if (f === sortField) setSortAsc(!sortAsc); else { setSortField(f); setSortAsc(true) } }} />
+                <SortableTh label="Kommune"      field="kommune"       sortField={sortField} sortAsc={sortAsc} onSort={f => { if (f === sortField) setSortAsc(!sortAsc); else { setSortField(f); setSortAsc(true) } }} />
+                <SortableTh label="Ans."         field="ansatte"       align="right"  sortField={sortField} sortAsc={sortAsc} onSort={f => { if (f === sortField) setSortAsc(!sortAsc); else { setSortField(f); setSortAsc(false) } }} />
+                <SortableTh label="Reg.dato"     field="registrert_dato" sortField={sortField} sortAsc={sortAsc} onSort={f => { if (f === sortField) setSortAsc(!sortAsc); else { setSortField(f); setSortAsc(false) } }} />
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
                   Handling
                 </th>
