@@ -1649,31 +1649,20 @@ function ProspektSok() {
         insert.kontaktpersoner = kontakter
       }
 
-      const { error } = await supabase.from('ringeliste').insert(insert)
-      if (error && /kontaktperson|kontaktpersoner|tildelt_bruker_id/i.test(error.message)) {
-        const fallback: Record<string, unknown> = {
-          bedriftsnavn: insert.bedriftsnavn,
-          orgnr: insert.orgnr,
-          bransje_kode: insert.bransje_kode,
-          bransje_navn: insert.bransje_navn,
-          kommune: insert.kommune,
-          kommunenummer: insert.kommunenummer,
-          ansatte: insert.ansatte,
-          registrert_dato: insert.registrert_dato,
-          mva_registrert: insert.mva_registrert,
-          kilde: insert.kilde,
-          stage: insert.stage,
-        }
-        if (!/tildelt_bruker_id/i.test(error.message)) {
-          fallback.tildelt_bruker_id = insert.tildelt_bruker_id
-        }
-        const { error: e2 } = await supabase.from('ringeliste').insert(fallback)
-        if (e2) {
-          alert('Kunne ikke legge til i ringeliste: ' + e2.message)
-          return
-        }
-      } else if (error) {
-        alert('Kunne ikke legge til i ringeliste: ' + error.message)
+      // Defensive insert: hvis Supabase klager på en kolonne som mangler, dropp den og prøv igjen.
+      // Repeterer opptil 5 ganger for å rydde flere manglende kolonner i serie.
+      let payload = { ...insert }
+      let attempts = 0
+      let err = (await supabase.from('ringeliste').insert(payload)).error
+      while (err && attempts < 5) {
+        const m = err.message.match(/Could not find the '([^']+)' column/i) || err.message.match(/column "([^"]+)" .* does not exist/i)
+        if (!m) break
+        delete (payload as Record<string, unknown>)[m[1]]
+        attempts++
+        err = (await supabase.from('ringeliste').insert(payload)).error
+      }
+      if (err) {
+        alert('Kunne ikke legge til i ringeliste: ' + err.message)
         return
       }
 
@@ -2537,31 +2526,20 @@ function NyregistrerteTab() {
       if (kontakter && kontakter.length > 0) {
         insert.kontaktpersoner = kontakter
       }
-      const { error } = await supabase.from('ringeliste').insert(insert)
-      if (error && /kontaktperson|kontaktpersoner|tildelt_bruker_id/i.test(error.message)) {
-        const fallback: Record<string, unknown> = {
-          bedriftsnavn: insert.bedriftsnavn,
-          orgnr: insert.orgnr,
-          bransje_kode: insert.bransje_kode,
-          bransje_navn: insert.bransje_navn,
-          kommune: insert.kommune,
-          kommunenummer: insert.kommunenummer,
-          ansatte: insert.ansatte,
-          registrert_dato: insert.registrert_dato,
-          mva_registrert: insert.mva_registrert,
-          kilde: insert.kilde,
-          stage: insert.stage,
-        }
-        if (!/tildelt_bruker_id/i.test(error.message)) {
-          fallback.tildelt_bruker_id = insert.tildelt_bruker_id
-        }
-        const { error: e2 } = await supabase.from('ringeliste').insert(fallback)
-        if (e2) {
-          alert('Kunne ikke legge til i ringeliste: ' + e2.message)
-          return
-        }
-      } else if (error) {
-        alert('Kunne ikke legge til i ringeliste: ' + error.message)
+      // Defensive insert: hvis Supabase klager på en kolonne som mangler, dropp den og prøv igjen.
+      // Repeterer opptil 5 ganger for å rydde flere manglende kolonner i serie.
+      let payload = { ...insert }
+      let attempts = 0
+      let err = (await supabase.from('ringeliste').insert(payload)).error
+      while (err && attempts < 5) {
+        const m = err.message.match(/Could not find the '([^']+)' column/i) || err.message.match(/column "([^"]+)" .* does not exist/i)
+        if (!m) break
+        delete (payload as Record<string, unknown>)[m[1]]
+        attempts++
+        err = (await supabase.from('ringeliste').insert(payload)).error
+      }
+      if (err) {
+        alert('Kunne ikke legge til i ringeliste: ' + err.message)
         return
       }
       setRingeliste(prev => new Set([...prev, row.orgnr]))
