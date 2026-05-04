@@ -1596,7 +1596,7 @@ function ProspektSok() {
   return (
     <div className="flex gap-0">
       {/* Filter panel */}
-      <div className="w-72 flex-shrink-0 border-r border-slate-200 dark:border-slate-700 p-5 space-y-5 bg-white dark:bg-slate-800">
+      <div className="w-72 flex-shrink-0 border-r border-slate-200 dark:border-slate-700 p-5 space-y-5 bg-white dark:bg-slate-800 shadow-sm">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
             <Filter className="w-4 h-4" />
@@ -1792,7 +1792,7 @@ function ProspektSok() {
 
         {/* Bulk action bar */}
         {hasSearched && (
-          <div className="px-4 py-2.5 bg-slate-50/70 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+          <div className="px-4 py-2.5 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-400">
                 <input
@@ -2314,7 +2314,7 @@ function NyregistrerteTab() {
   return (
     <div className="flex gap-0">
       {/* Filter panel */}
-      <div className="w-72 flex-shrink-0 border-r border-slate-200 dark:border-slate-700 p-5 space-y-5 bg-white dark:bg-slate-800">
+      <div className="w-72 flex-shrink-0 border-r border-slate-200 dark:border-slate-700 p-5 space-y-5 bg-white dark:bg-slate-800 shadow-sm">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
             <Filter className="w-4 h-4" />
@@ -2414,7 +2414,7 @@ function NyregistrerteTab() {
       {/* Main panel */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Bulk action bar */}
-        <div className="px-4 py-2.5 bg-slate-50/70 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <div className="px-4 py-2.5 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-400">
               <input
@@ -2668,7 +2668,7 @@ export function ProspectsMVP() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-900">
+      <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-950">
         {activeTab === 'sok' && <ProspektSok />}
         {activeTab === 'nyregistrerte' && <NyregistrerteTab />}
       </div>
