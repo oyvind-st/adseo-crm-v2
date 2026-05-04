@@ -873,7 +873,13 @@ function ProspektSok() {
   const [pageSize, setPageSize] = useState(20)
   const [page, setPage] = useState(0)
 
-  // Result accumulator (across multiple Brreg pages, used when contact filters require over-fetching)
+  // Result accumulator (across multiple Brreg pages).
+  //
+  // Brreg's search API doesn't support filtering on contact info (hjemmeside,
+  // telefon, epost), so we always fetch a moderately large page from Brreg and
+  // paginate locally. Brreg supports up to size=10000; size=500 hits a sweet
+  // spot of ~250ms latency for 800 KB transfer.
+  const BRREG_FETCH_SIZE = 500
   const [buffer, setBuffer] = useState<Company[]>([])
   const [brregNextPage, setBrregNextPage] = useState(0)
   const [brregTotal, setBrregTotal] = useState(0)
@@ -928,8 +934,7 @@ function ProspektSok() {
   // into the "applied" state at the moment of search so toggling a checkbox
   // afterwards doesn't change what's filtered until the user explicitly searches
   // again.
-  const doSearch = useCallback(async (sizeOverride?: number) => {
-    const size = sizeOverride ?? pageSize
+  const doSearch = useCallback(async () => {
     setLoading(true)
     setError('')
     setBuffer([])
@@ -944,7 +949,7 @@ function ProspektSok() {
     setAppliedHarEpost(harEpost)
     setExtraPagesAllowed(0)
     try {
-      const res = await searchBrreg({ ...paramsRef.current, page: 0, size })
+      const res = await searchBrreg({ ...paramsRef.current, page: 0, size: BRREG_FETCH_SIZE })
       setBuffer(res.items)
       setBrregTotal(res.total)
       setBrregTotalPages(res.totalPages)
@@ -954,7 +959,7 @@ function ProspektSok() {
     } finally {
       setLoading(false)
     }
-  }, [pageSize, harHjemmeside, harTelefon, harEpost])
+  }, [harHjemmeside, harTelefon, harEpost])
 
   const handleSearch = () => {
     setSearchName(searchInput)
@@ -1017,36 +1022,46 @@ function ProspektSok() {
         : Math.max(page + 2, Math.ceil(filteredItems.length / pageSize) + 1))
     : Math.max(1, Math.ceil(brregTotal / pageSize))
 
-  // Soft cap so the auto-fetch loop never runs away when most companies don't
-  // match the contact filter (it'd otherwise scan the entire Brreg result set).
-  // The user can break through this cap by clicking "Last flere" below the table.
-  const AUTO_FETCH_CAP_PAGES = 25
+  // Bound the locally available pages by what's actually in the buffer (Brreg
+  // pagination can yield more rows than we've fetched so far). Without a
+  // contact filter this lets us page through the buffer instantly and only hit
+  // Brreg again when we run out.
+  const localTotalPages = Math.max(1, Math.ceil(buffer.length / pageSize))
+
+  // Soft cap on auto-fetching. Each fetch grabs BRREG_FETCH_SIZE (500) records,
+  // so 5 fetches = 2500 records scanned before we ask the user to confirm
+  // scanning more.
+  const AUTO_FETCH_CAP_PAGES = 5
   const [extraPagesAllowed, setExtraPagesAllowed] = useState(0)
   const fetchCap = AUTO_FETCH_CAP_PAGES + extraPagesAllowed
-  const cappedByUser = hasContactFilter && brregNextPage >= fetchCap && !exhausted
+  const cappedByUser = brregNextPage >= fetchCap && !exhausted && (
+    // Capped if contact filter on and we still need more matches, OR
+    // user has paged beyond what the buffer covers.
+    (hasContactFilter && filteredItems.length < (page + 1) * pageSize) ||
+    (!hasContactFilter && buffer.length < (page + 1) * pageSize)
+  )
 
-  // Auto-fetch more Brreg pages when contact filter is on and we don't have enough filtered items
-  // for the current logical page (or one extra to allow forward navigation).
+  // Auto-fetch more Brreg pages when we don't have enough buffered items for
+  // the current logical page (with or without contact filter). Each fetch
+  // grabs BRREG_FETCH_SIZE records in one round trip — no more sequential
+  // small fetches.
   useEffect(() => {
     if (!hasSearched) return
     if (loading || loadingMore) return
     if (brregNextPage >= brregTotalPages) return
-
-    // We only over-fetch when contact filters demand it. Without contact filters,
-    // a Brreg page maps 1:1 to a logical page, so we fetch on demand from goToPage().
-    if (!hasContactFilter) return
-
-    // Stop after a fixed number of Brreg pages — user can opt in to more.
     if (brregNextPage >= fetchCap) return
 
     const needed = (page + 2) * pageSize  // current page + one extra so "Next" is responsive
-    if (filteredItems.length >= needed) return
+    const haveEnough = hasContactFilter
+      ? filteredItems.length >= needed
+      : buffer.length >= needed
+    if (haveEnough) return
 
     let cancelled = false
     setLoadingMore(true)
     ;(async () => {
       try {
-        const res = await searchBrreg({ ...paramsRef.current, page: brregNextPage, size: pageSize })
+        const res = await searchBrreg({ ...paramsRef.current, page: brregNextPage, size: BRREG_FETCH_SIZE })
         if (cancelled) return
         setBuffer(prev => [...prev, ...res.items])
         setBrregNextPage(prev => prev + 1)
@@ -1054,61 +1069,27 @@ function ProspektSok() {
         if (res.totalPages !== brregTotalPages) setBrregTotalPages(res.totalPages)
         if (res.total !== brregTotal) setBrregTotal(res.total)
       } catch {
-        // network blip — leave loadingMore false; user can retry by paging
+        // network blip — user can retry by clicking next page or "Last flere"
       } finally {
         if (!cancelled) setLoadingMore(false)
       }
     })()
     return () => { cancelled = true }
-  }, [hasSearched, hasContactFilter, page, pageSize, filteredItems.length, brregNextPage, brregTotalPages, loading, loadingMore, brregTotal, fetchCap])
+  }, [hasSearched, hasContactFilter, page, pageSize, filteredItems.length, buffer.length, brregNextPage, brregTotalPages, loading, loadingMore, brregTotal, fetchCap])
 
-  // Page navigation. Without contact filters we can fetch the matching Brreg page on demand.
-  const goToPage = useCallback(async (newPage: number) => {
+  // Page navigation. The buffer is contiguous (no padding), so just moving the
+  // logical page is enough — the auto-fetch effect tops up the buffer when
+  // we run out.
+  const goToPage = useCallback((newPage: number) => {
     const target = Math.max(0, newPage)
     setSelected(new Set())
-
-    if (hasContactFilter) {
-      // Just move the logical page; the auto-fetch effect tops up the buffer if needed
-      setPage(target)
-      return
-    }
-
-    // No contact filter: each logical page maps directly to a Brreg page
-    const haveTo = brregNextPage * pageSize  // we have items up to (but not including) this offset
-    const wantTo = (target + 1) * pageSize
-
-    if (haveTo >= wantTo || target * pageSize < buffer.length) {
-      setPage(target)
-      return
-    }
-
-    // Need to fetch the next Brreg page for this target
-    setLoading(true)
-    setError('')
-    try {
-      const res = await searchBrreg({ ...paramsRef.current, page: target, size: pageSize })
-      // Replace buffer with this page's items (we don't need to keep older pages in memory
-      // when there's no contact filter — the user navigates page-by-page).
-      // Keep buffer aligned to start at offset target*pageSize:
-      setBuffer(prev => {
-        // Pad the front so that slice(target*pageSize, ...) maps correctly
-        const padded: Company[] = new Array(target * pageSize).fill(null as any)
-        return [...padded, ...res.items]
-      })
-      setBrregNextPage(target + 1)
-      setBrregTotal(res.total)
-      setBrregTotalPages(res.totalPages)
-      setPage(target)
-    } catch {
-      setError('Klarte ikke hente data fra Brreg. Prøv igjen.')
-    } finally {
-      setLoading(false)
-    }
-  }, [hasContactFilter, brregNextPage, pageSize, buffer.length])
+    setPage(target)
+  }, [])
 
   const handlePageSizeChange = (newSize: number) => {
     setPageSize(newSize)
-    if (hasSearched) doSearch(newSize)
+    setPage(0)
+    setSelected(new Set())
   }
 
   const addToRingeliste = async (company: Company) => {
@@ -1500,7 +1481,9 @@ function ProspektSok() {
           {cappedByUser && (
             <div className="m-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-center justify-between gap-4">
               <div className="text-sm text-amber-800 dark:text-amber-300">
-                Skannet {brregNextPage} av {brregTotalPages.toLocaleString('nb')} Brreg-sider og funnet {filteredItems.length.toLocaleString('nb')} treff med kontaktinfo. Skann flere?
+                Skannet {(brregNextPage * BRREG_FETCH_SIZE).toLocaleString('nb')} av {brregTotal.toLocaleString('nb')} Brreg-bedrifter
+                {hasContactFilter && ` og funnet ${filteredItems.length.toLocaleString('nb')} treff med kontaktinfo`}
+                . Skann flere?
               </div>
               <button
                 onClick={() => setExtraPagesAllowed(n => n + 25)}
@@ -1517,7 +1500,9 @@ function ProspektSok() {
           <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800 flex-wrap gap-3">
             <span className="text-xs text-slate-500 dark:text-slate-400">
               Side {page + 1}
-              {hasContactFilter && !exhausted ? ' av ?' : ` av ${Math.max(1, Math.ceil(totalCount / pageSize))}`}
+              {hasContactFilter
+                ? (!exhausted ? ' av ?' : ` av ${Math.max(1, Math.ceil(totalCount / pageSize))}`)
+                : ` av ${Math.max(1, Math.ceil(totalCount / pageSize))} (${localTotalPages.toLocaleString('nb')} buffret)`}
               {' · '}
               {hasContactFilter && !exhausted
                 ? `${totalCount.toLocaleString('nb')}+ treff`
