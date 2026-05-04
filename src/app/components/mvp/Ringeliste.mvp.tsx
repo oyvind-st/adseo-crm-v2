@@ -4,7 +4,8 @@ import {
   Phone, PhoneCall, Building2, Calendar, MapPin, Users,
   CheckCircle, Clock, ArrowRight, Plus, Trash2,
   ExternalLink, Globe, Filter, RefreshCw, X,
-  TrendingUp, BarChart3, AlertCircle
+  TrendingUp, BarChart3, AlertCircle, ChevronDown, ChevronUp,
+  Briefcase, FileCheck, Mail, Loader2
 } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useCurrentUser } from '../../contexts/UserContext'
@@ -159,6 +160,7 @@ export function RingelisteMVP() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   // filters
   const [brukerFilter, setBrukerFilter] = useState<'min' | 'alle' | string>('min')
@@ -309,9 +311,9 @@ export function RingelisteMVP() {
         />
       </div>
 
-      {/* Layout: list + slide-in */}
+      {/* Layout: list + always-visible right panel */}
       <div className="grid grid-cols-12 gap-4 min-h-[60vh]">
-        <div className={activeRow ? 'col-span-7' : 'col-span-12'}>
+        <div className="col-span-7">
           <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200">
               Neste i køen
@@ -330,7 +332,15 @@ export function RingelisteMVP() {
                     row={row}
                     index={i}
                     active={row.id === activeId}
-                    onSelect={() => setActiveId(row.id)}
+                    expanded={row.id === expandedId}
+                    onSelect={() => {
+                      setActiveId(row.id)
+                      setExpandedId(prev => prev === row.id ? null : row.id)
+                    }}
+                    onRing={() => {
+                      setActiveId(row.id)
+                      setExpandedId(row.id)
+                    }}
                     onReassign={(uid) => reassignTo(row, uid)}
                     onRemove={() => removeFromRingeliste(row)}
                     profiles={profiles}
@@ -342,19 +352,40 @@ export function RingelisteMVP() {
           </div>
         </div>
 
-        {activeRow && (
-          <div className="col-span-5">
+        <div className="col-span-5">
+          {activeRow ? (
             <CallPanel
               row={activeRow}
               userId={user?.id || null}
-              onClose={() => setActiveId(null)}
+              onClose={() => { setActiveId(null); setExpandedId(null) }}
               onSaved={async () => { await loadRows(); await loadStats() }}
               onConverted={(kundeId) => {
                 navigate(`/customers/${kundeId}`)
               }}
             />
-          </div>
-        )}
+          ) : (
+            <CallPanelPlaceholder />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
+// Placeholder for right panel when no row selected
+// ─────────────────────────────────────────────
+function CallPanelPlaceholder() {
+  return (
+    <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 h-full flex items-center justify-center p-8">
+      <div className="text-center max-w-xs">
+        <Phone className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          Velg en bedrift fra listen for å forberede en samtale.
+        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">
+          Klikk på raden for å se mer info, eller trykk «Ring» for å starte forberedelsen.
+        </p>
       </div>
     </div>
   )
@@ -389,12 +420,14 @@ function StatCard({ icon, label, value, accent }: { icon: React.ReactNode; label
 // Row card — viser antall_forsok + siste_ring_dato badge
 // ─────────────────────────────────────────────
 function RingeRowCard({
-  row, index, active, onSelect, onReassign, onRemove, profiles, navnLookup
+  row, index, active, expanded, onSelect, onRing, onReassign, onRemove, profiles, navnLookup
 }: {
   row: RingeRow
   index: number
   active: boolean
+  expanded: boolean
   onSelect: () => void
+  onRing: () => void
   onReassign: (uid: string | null) => void
   onRemove: () => void
   profiles: Profile[]
@@ -416,7 +449,13 @@ function RingeRowCard({
   const sistRel = formatRelative(row.siste_ring_dato)
 
   return (
-    <div className={`p-4 transition-colors ${active ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+    <div className={`transition-colors ${active ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+      <div className="p-4 cursor-pointer" onClick={(e) => {
+        // Don't trigger if clicking on a button/link/menu
+        const target = e.target as HTMLElement
+        if (target.closest('button') || target.closest('a')) return
+        onSelect()
+      }}>
       <div className="flex items-start gap-3">
         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 text-white text-sm font-semibold flex items-center justify-center shrink-0">
           {index + 1}
@@ -468,7 +507,7 @@ function RingeRowCard({
             </div>
             <div className="flex flex-col items-end gap-1 shrink-0">
               <button
-                onClick={onSelect}
+                onClick={(e) => { e.stopPropagation(); onRing() }}
                 className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md flex items-center gap-1.5"
               >
                 <PhoneCall className="w-4 h-4" /> {active ? 'Åpen' : 'Ring'}
@@ -514,6 +553,170 @@ function RingeRowCard({
           </div>
         </div>
       </div>
+      </div>
+      {expanded && (
+        <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 px-4 py-3">
+          <BrregDetails orgnr={row.orgnr} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
+// BrregDetails — lazily fetches /enheter/{orgnr} and shows extra info
+// ─────────────────────────────────────────────
+type BrregEnhet = {
+  organisasjonsnummer?: string
+  navn?: string
+  organisasjonsform?: { kode?: string; beskrivelse?: string }
+  naeringskode1?: { kode?: string; beskrivelse?: string }
+  forretningsadresse?: { adresse?: string[]; postnummer?: string; poststed?: string; kommune?: string }
+  postadresse?: { adresse?: string[]; postnummer?: string; poststed?: string; kommune?: string }
+  antallAnsatte?: number
+  registreringsdatoEnhetsregisteret?: string
+  stiftelsesdato?: string
+  registrertIMvaregisteret?: boolean
+  registrertIForetaksregisteret?: boolean
+  registrertIFrivillighetsregisteret?: boolean
+  konkurs?: boolean
+  underAvvikling?: boolean
+  underTvangsavviklingEllerTvangsopplosning?: boolean
+  hjemmeside?: string
+  telefon?: string
+  mobil?: string
+  epostadresse?: string
+  vedtektsfestetFormaal?: string[]
+  aktivitet?: string[]
+}
+
+function BrregDetails({ orgnr }: { orgnr: string }) {
+  const [data, setData] = useState<BrregEnhet | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancel = false
+    setLoading(true)
+    setError(null)
+    fetch(`https://data.brreg.no/enhetsregisteret/api/enheter/${orgnr}`, {
+      headers: { Accept: 'application/json' }
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('Ikke funnet')))
+      .then(j => { if (!cancel) { setData(j); setLoading(false) } })
+      .catch(e => { if (!cancel) { setError(String(e.message || e)); setLoading(false) } })
+    return () => { cancel = true }
+  }, [orgnr])
+
+  if (loading) {
+    return (
+      <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+        <Loader2 className="w-3 h-3 animate-spin" /> Henter data fra Brønnøysundregistrene…
+      </div>
+    )
+  }
+  if (error || !data) {
+    return (
+      <div className="text-xs text-rose-600 dark:text-rose-400">
+        Kunne ikke hente Brreg-data: {error || 'ukjent feil'}
+      </div>
+    )
+  }
+
+  const fa = data.forretningsadresse
+  const adresse = fa ? [...(fa.adresse || []), `${fa.postnummer || ''} ${fa.poststed || ''}`.trim()].filter(Boolean).join(', ') : null
+  const status = data.konkurs ? { label: 'Konkurs', color: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' }
+    : data.underAvvikling ? { label: 'Under avvikling', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' }
+    : { label: 'Aktiv', color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' }
+
+  return (
+    <div className="space-y-3 text-xs">
+      <div className="flex items-center gap-2">
+        <span className="uppercase tracking-wide text-slate-500 dark:text-slate-400">Fra Brønnøysund</span>
+        <span className={`px-2 py-0.5 rounded font-medium ${status.color}`}>{status.label}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+        {data.organisasjonsform?.beskrivelse && (
+          <DetailRow icon={<Briefcase className="w-3 h-3" />} label="Organisasjonsform">
+            {data.organisasjonsform.beskrivelse}
+            {data.organisasjonsform.kode && <span className="text-slate-400"> ({data.organisasjonsform.kode})</span>}
+          </DetailRow>
+        )}
+        {typeof data.antallAnsatte === 'number' && (
+          <DetailRow icon={<Users className="w-3 h-3" />} label="Ansatte">{data.antallAnsatte}</DetailRow>
+        )}
+        {data.naeringskode1 && (
+          <DetailRow icon={<Briefcase className="w-3 h-3" />} label="Næringskode">
+            {data.naeringskode1.kode} — {data.naeringskode1.beskrivelse}
+          </DetailRow>
+        )}
+        {adresse && (
+          <DetailRow icon={<MapPin className="w-3 h-3" />} label="Forretningsadresse">{adresse}</DetailRow>
+        )}
+        {data.registreringsdatoEnhetsregisteret && (
+          <DetailRow icon={<Calendar className="w-3 h-3" />} label="Registrert">
+            {new Date(data.registreringsdatoEnhetsregisteret).toLocaleDateString('nb-NO')}
+          </DetailRow>
+        )}
+        {data.stiftelsesdato && (
+          <DetailRow icon={<Calendar className="w-3 h-3" />} label="Stiftet">
+            {new Date(data.stiftelsesdato).toLocaleDateString('nb-NO')}
+          </DetailRow>
+        )}
+        <DetailRow icon={<FileCheck className="w-3 h-3" />} label="MVA-registrert">
+          {data.registrertIMvaregisteret ? 'Ja' : 'Nei'}
+        </DetailRow>
+        {data.telefon && (
+          <DetailRow icon={<Phone className="w-3 h-3" />} label="Telefon">
+            <a href={`tel:${data.telefon.replace(/\s/g, '')}`} className="text-blue-600 dark:text-blue-400 hover:underline">
+              {data.telefon}
+            </a>
+          </DetailRow>
+        )}
+        {data.epostadresse && (
+          <DetailRow icon={<Mail className="w-3 h-3" />} label="E-post">
+            <a href={`mailto:${data.epostadresse}`} className="text-blue-600 dark:text-blue-400 hover:underline">
+              {data.epostadresse}
+            </a>
+          </DetailRow>
+        )}
+        {data.hjemmeside && (
+          <DetailRow icon={<Globe className="w-3 h-3" />} label="Hjemmeside">
+            <a href={data.hjemmeside.startsWith('http') ? data.hjemmeside : `https://${data.hjemmeside}`}
+               target="_blank" rel="noopener noreferrer"
+               className="text-blue-600 dark:text-blue-400 hover:underline truncate inline-block max-w-[12rem]">
+              {data.hjemmeside}
+            </a>
+          </DetailRow>
+        )}
+      </div>
+      {data.vedtektsfestetFormaal && data.vedtektsfestetFormaal.length > 0 && (
+        <div>
+          <div className="text-slate-500 dark:text-slate-400 mb-1">Vedtektsfestet formål</div>
+          <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{data.vedtektsfestetFormaal.join(' ')}</p>
+        </div>
+      )}
+      {data.aktivitet && data.aktivitet.length > 0 && (
+        <div>
+          <div className="text-slate-500 dark:text-slate-400 mb-1">Aktivitet</div>
+          <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{data.aktivitet.join(' ')}</p>
+        </div>
+      )}
+      <div className="text-slate-400 dark:text-slate-500 pt-1">
+        Mer info kommer snart fra andre kilder (Proff, hjemmeside-analyse, etc).
+      </div>
+    </div>
+  )
+}
+
+function DetailRow({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 mb-0.5">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className="text-slate-700 dark:text-slate-200 truncate">{children}</div>
     </div>
   )
 }
