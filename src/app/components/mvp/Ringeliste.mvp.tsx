@@ -150,6 +150,159 @@ function formatRelative(iso?: string | null): string | null {
 }
 
 // ─────────────────────────────────────────────
+// Brreg-roller — henter live kontaktpersoner med riktig prioritet.
+// Speiler logikken i Prospects.mvp.tsx slik at Ringeliste alltid har
+// oppdaterte roller (DAGL → INNH → KOMP → … → LEDE som siste fallback)
+// uavhengig av hva som ble lagret i ringeliste.kontaktpersoner.
+// ─────────────────────────────────────────────
+const KONTAKT_PRIORITET: Record<string, number> = {
+  DAGL: 1, INNH: 2, KOMP: 3, DTPR: 4, BSTV: 5, KONT: 6, FFGM: 7,
+  POHV: 10, POFL: 20, LEDE: 50,
+}
+
+interface BrregFullmaktData {
+  fritekst?: string
+  alenePersoner: Set<string>
+  fellesPersoner: Set<string>
+  personer: Array<{ key: string; navn: string; fodselsdato?: string; rolleKode: string; rolleTekst: string; alene: boolean }>
+}
+
+interface BrregKontakt {
+  kode: string
+  rolle: string
+  navn: string
+  fodselsdato?: string
+  prioritet: number
+  signaturAlene: boolean
+  signaturFellesskap: boolean
+  prokuraAlene: boolean
+  prokuraFellesskap: boolean
+}
+
+function normFodselsdato(s?: string): string {
+  if (!s) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(s)
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : s
+}
+function pkey(navn: string, fodselsdato?: string): string {
+  const n = navn.trim().toLowerCase().replace(/\s+/g, ' ')
+  return `${n}|${normFodselsdato(fodselsdato)}`
+}
+
+async function fetchFullmaktData(orgnr: string, type: 'signatur' | 'prokura'): Promise<BrregFullmaktData> {
+  const empty: BrregFullmaktData = { alenePersoner: new Set(), fellesPersoner: new Set(), personer: [] }
+  try {
+    const resp = await fetch(`/api/brreg-fullmakt?orgnr=${encodeURIComponent(orgnr)}&type=${type}`,
+      { headers: { Accept: 'application/json' } })
+    if (!resp.ok) return empty
+    const data = await resp.json()
+    const grunnlag = data.signeringsGrunnlag
+    if (!grunnlag) return empty
+    const out: BrregFullmaktData = {
+      fritekst: grunnlag.signaturProkuraRoller?.signaturProkuraFritekst,
+      alenePersoner: new Set(), fellesPersoner: new Set(), personer: []
+    }
+    const seen = new Set<string>()
+    for (const kombi of (data.signeringsKombinasjon?.kombinasjon || [])) {
+      const personer = kombi.personRolleKombinasjon || []
+      const alene = personer.length === 1
+      const target = alene ? out.alenePersoner : out.fellesPersoner
+      for (const p of personer) {
+        const dob = normFodselsdato(p.fodselsdato)
+        const key = pkey(p.navn, dob)
+        target.add(key)
+        if (!seen.has(key)) {
+          seen.add(key)
+          out.personer.push({
+            key, navn: p.navn, fodselsdato: dob || undefined,
+            rolleKode: p.rolle?.kode || '',
+            rolleTekst: p.rolle?.tekstforklaring || p.rolle?.kode || '',
+            alene
+          })
+        }
+      }
+    }
+    return out
+  } catch {
+    return empty
+  }
+}
+
+async function fetchBrregKontakter(orgnr: string): Promise<BrregKontakt[]> {
+  try {
+    const [rollerResp, signatur, prokura] = await Promise.all([
+      fetch(`https://data.brreg.no/enhetsregisteret/api/enheter/${orgnr}/roller`, { headers: { Accept: 'application/json' } }),
+      fetchFullmaktData(orgnr, 'signatur'),
+      fetchFullmaktData(orgnr, 'prokura'),
+    ])
+    if (!rollerResp.ok) return []
+    const data = await rollerResp.json()
+    const byKey = new Map<string, BrregKontakt>()
+
+    for (const rg of data.rollegrupper || []) {
+      for (const r of rg.roller || []) {
+        if (r.fratraadt || r.avregistrert) continue
+        const kode: string = r.type?.kode
+        const prio = KONTAKT_PRIORITET[kode]
+        if (prio === undefined) continue
+        const p = r.person
+        const e = r.enhet
+        let navn = ''
+        let fodselsdato: string | undefined
+        if (p?.navn) {
+          const parts = [p.navn.fornavn, p.navn.mellomnavn, p.navn.etternavn].filter(Boolean)
+          navn = parts.join(' ').trim()
+          if (p.fodselsdato) fodselsdato = normFodselsdato(String(p.fodselsdato))
+        } else if (e?.navn) {
+          navn = e.navn
+        }
+        if (!navn) continue
+        const key = pkey(navn, fodselsdato)
+        const prev = byKey.get(key)
+        if (prev && prev.prioritet <= prio) continue
+        byKey.set(key, {
+          kode, rolle: r.type?.beskrivelse || kode, navn, fodselsdato, prioritet: prio,
+          signaturAlene: signatur.alenePersoner.has(key),
+          signaturFellesskap: signatur.fellesPersoner.has(key),
+          prokuraAlene: prokura.alenePersoner.has(key),
+          prokuraFellesskap: prokura.fellesPersoner.has(key),
+        })
+      }
+    }
+    // Add prokurister fra /fullmakt som ikke kom med i /roller
+    for (const p of (prokura.personer || [])) {
+      if (byKey.has(p.key)) continue
+      const prio = p.alene ? KONTAKT_PRIORITET.POHV : KONTAKT_PRIORITET.POFL
+      byKey.set(p.key, {
+        kode: p.alene ? 'POHV' : 'POFL',
+        rolle: p.rolleTekst || (p.alene ? 'Prokura hver for seg' : 'Prokura i fellesskap'),
+        navn: p.navn,
+        fodselsdato: p.fodselsdato,
+        prioritet: prio,
+        signaturAlene: signatur.alenePersoner.has(p.key),
+        signaturFellesskap: signatur.fellesPersoner.has(p.key),
+        prokuraAlene: p.alene,
+        prokuraFellesskap: !p.alene,
+      })
+    }
+    const all = Array.from(byKey.values())
+    // Tier-2 (LEDE) bare som fallback hvis ingen Tier-1 finnes
+    const hasTier1 = all.some(k => k.prioritet < 50)
+    const filtered = hasTier1 ? all.filter(k => k.prioritet < 50) : all
+    return filtered.sort((a, b) => {
+      if (a.prioritet === b.prioritet) {
+        if (a.signaturAlene !== b.signaturAlene) return a.signaturAlene ? -1 : 1
+        return a.navn.localeCompare(b.navn, 'nb')
+      }
+      return a.prioritet - b.prioritet
+    })
+  } catch {
+    return []
+  }
+}
+
+// ─────────────────────────────────────────────
 // Main component
 // ─────────────────────────────────────────────
 export function RingelisteMVP() {
@@ -765,6 +918,7 @@ function CallPanel({
   const [notat, setNotat] = useState('')
   const [oppgaveDato, setOppgaveDato] = useState('')
   const [savingOutcome, setSavingOutcome] = useState<Outcome | null>(null)
+  const [hentingKontakter, setHentingKontakter] = useState(false)
 
   // Reset state when row changes
   useEffect(() => {
@@ -776,6 +930,49 @@ function CallPanel({
     setNotat('')
     setOppgaveDato('')
   }, [row.id])
+
+  // Hent live kontakter fra Brreg (med riktig prioritet) og merge med
+  // eksisterende kontaktpersoner — bevarer brukerens telefon/epost-edits.
+  useEffect(() => {
+    let cancelled = false
+    setHentingKontakter(true)
+    fetchBrregKontakter(row.orgnr).then(brregKontakter => {
+      if (cancelled) return
+      setKontakter(prev => {
+        const byNavn = new Map<string, Kontakt>()
+        // Start med eksisterende (bevarer user-edits)
+        prev.forEach(k => {
+          const key = k.navn.trim().toLowerCase()
+          if (key) byNavn.set(key, k)
+        })
+        // Legg til/merge fra Brreg
+        brregKontakter.forEach(bk => {
+          const key = bk.navn.trim().toLowerCase()
+          const eksisterende = byNavn.get(key)
+          byNavn.set(key, {
+            navn: bk.navn,
+            // Behold eksisterende rolle hvis brukeren har endret den, ellers Brreg
+            rolle: (eksisterende?.rolle && eksisterende.rolle !== bk.rolle) ? eksisterende.rolle : bk.rolle,
+            telefon: eksisterende?.telefon || row.telefon || '',
+            epost: eksisterende?.epost || row.epost || '',
+            fodselsdato: bk.fodselsdato || eksisterende?.fodselsdato,
+          })
+        })
+        // Sorter: Brreg-rekkefølgen først (ved å bruke prioritetsindeks),
+        // deretter eventuelle frittstående kontakter brukeren har lagt til
+        const brregOrder = new Map(brregKontakter.map((k, i) => [k.navn.trim().toLowerCase(), i]))
+        const merged = Array.from(byNavn.values())
+        merged.sort((a, b) => {
+          const ai = brregOrder.has(a.navn.trim().toLowerCase()) ? brregOrder.get(a.navn.trim().toLowerCase())! : 1000
+          const bi = brregOrder.has(b.navn.trim().toLowerCase()) ? brregOrder.get(b.navn.trim().toLowerCase())! : 1000
+          return ai - bi
+        })
+        return merged
+      })
+      setHentingKontakter(false)
+    }).catch(() => { if (!cancelled) setHentingKontakter(false) })
+    return () => { cancelled = true }
+  }, [row.id, row.orgnr])
 
   // Timer tick
   useEffect(() => {
@@ -1026,7 +1223,10 @@ function CallPanel({
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Kontakter — velg hvem du ringer</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                Kontakter — velg hvem du ringer
+                {hentingKontakter && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+              </p>
               <button
                 onClick={addKontakt}
                 className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
