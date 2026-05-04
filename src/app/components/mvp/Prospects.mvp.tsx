@@ -1271,7 +1271,7 @@ function ProspektSok() {
   const [appliedHarEpost, setAppliedHarEpost] = useState(false)
 
   // Pagination (logical — across filtered results)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(0)
 
   // Result accumulator (across multiple Brreg pages).
@@ -1837,6 +1837,56 @@ function ProspektSok() {
           </div>
         )}
 
+        {/* Pagination (top) */}
+        {hasSearched && totalCount > 0 && (
+          <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800 flex-wrap gap-3">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Side {page + 1}
+              {hasContactFilter
+                ? (!exhausted ? ' av ?' : ` av ${Math.max(1, Math.ceil(totalCount / pageSize))}`)
+                : ` av ${Math.max(1, Math.ceil(totalCount / pageSize))}`}
+              {' · '}
+              {hasContactFilter && !exhausted
+                ? `${totalCount.toLocaleString('nb')}+ treff`
+                : `${totalCount.toLocaleString('nb')} treff`}
+            </span>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                <span>Per side:</span>
+                <select
+                  value={pageSize}
+                  onChange={e => handlePageSizeChange(Number(e.target.value))}
+                  className="px-2 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={500}>500</option>
+                </select>
+              </label>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => goToPage(page - 1)}
+                  disabled={page === 0 || loading}
+                  className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-xs text-slate-500 dark:text-slate-400 px-2 tabular-nums">
+                  {page + 1}
+                </span>
+                <button
+                  onClick={() => goToPage(page + 1)}
+                  disabled={(exhausted && page >= totalPages - 1) || loading}
+                  className="p-1.5 rounded border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Table */}
         <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-950">
           {loading && (
@@ -1971,10 +2021,10 @@ function ProspektSok() {
                   onChange={e => handlePageSizeChange(Number(e.target.value))}
                   className="px-2 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
-                  <option value={20}>20</option>
                   <option value={50}>50</option>
                   <option value={100}>100</option>
                   <option value={200}>200</option>
+                  <option value={500}>500</option>
                 </select>
               </label>
 
