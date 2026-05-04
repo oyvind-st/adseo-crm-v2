@@ -855,10 +855,19 @@ function ProspektSok() {
   const [tilRegDato, setTilRegDato] = useState('')
   const [mvaRegistrert, setMvaRegistrert] = useState(true)
   const [foretaksReg, setForetaksReg] = useState(true)
-  // Contact info filters (client-side post-filter)
+  // Contact info filters — UI state (checkboxes). These DON'T auto-trigger
+  // a search; they're snapshotted into `appliedHar*` when the user clicks
+  // "Søk med filtre" (or hits Enter on the name search), so toggling a box
+  // doesn't kick off a long Brreg over-fetch loop.
   const [harHjemmeside, setHarHjemmeside] = useState(false)
   const [harTelefon, setHarTelefon] = useState(false)
   const [harEpost, setHarEpost] = useState(false)
+
+  // Applied snapshot — what's actually used to filter the buffer + decide
+  // whether to over-fetch from Brreg.
+  const [appliedHarHjemmeside, setAppliedHarHjemmeside] = useState(false)
+  const [appliedHarTelefon, setAppliedHarTelefon] = useState(false)
+  const [appliedHarEpost, setAppliedHarEpost] = useState(false)
 
   // Pagination (logical — across filtered results)
   const [pageSize, setPageSize] = useState(20)
@@ -915,7 +924,10 @@ function ProspektSok() {
   const paramsRef = useRef<SearchParams>(buildBaseParams())
   paramsRef.current = buildBaseParams()
 
-  // Reset and re-fetch from Brreg page 0
+  // Reset and re-fetch from Brreg page 0. Snapshots the contact-info checkboxes
+  // into the "applied" state at the moment of search so toggling a checkbox
+  // afterwards doesn't change what's filtered until the user explicitly searches
+  // again.
   const doSearch = useCallback(async (sizeOverride?: number) => {
     const size = sizeOverride ?? pageSize
     setLoading(true)
@@ -927,6 +939,10 @@ function ProspektSok() {
     setBrregTotalPages(0)
     setSelected(new Set())
     setHasSearched(true)
+    setAppliedHarHjemmeside(harHjemmeside)
+    setAppliedHarTelefon(harTelefon)
+    setAppliedHarEpost(harEpost)
+    setExtraPagesAllowed(0)
     try {
       const res = await searchBrreg({ ...paramsRef.current, page: 0, size })
       setBuffer(res.items)
@@ -938,7 +954,7 @@ function ProspektSok() {
     } finally {
       setLoading(false)
     }
-  }, [pageSize])
+  }, [pageSize, harHjemmeside, harTelefon, harEpost])
 
   const handleSearch = () => {
     setSearchName(searchInput)
@@ -966,15 +982,24 @@ function ProspektSok() {
     setHarEpost(false)
   }
 
-  // Client-side post-filter for contact info — applied to ALL accumulated items
-  const hasContactFilter = harHjemmeside || harTelefon || harEpost
+  // Client-side post-filter for contact info — uses the APPLIED snapshot, not
+  // the live checkbox values, so toggling a box after search doesn't shrink
+  // the result set until the user clicks "Søk med filtre" again.
+  const hasContactFilter = appliedHarHjemmeside || appliedHarTelefon || appliedHarEpost
 
   const filteredItems = buffer.filter(c => {
-    if (harHjemmeside && !c.hjemmeside) return false
-    if (harTelefon && !c.telefon && !c.mobil) return false
-    if (harEpost && !c.epost) return false
+    if (appliedHarHjemmeside && !c.hjemmeside) return false
+    if (appliedHarTelefon && !c.telefon && !c.mobil) return false
+    if (appliedHarEpost && !c.epost) return false
     return true
   })
+
+  // Has the user changed contact filters since last search? (Used to nudge them
+  // to click "Søk med filtre" again.)
+  const contactFilterDirty =
+    harHjemmeside !== appliedHarHjemmeside ||
+    harTelefon !== appliedHarTelefon ||
+    harEpost !== appliedHarEpost
 
   const exhausted = hasSearched && brregNextPage >= brregTotalPages
 
@@ -992,6 +1017,14 @@ function ProspektSok() {
         : Math.max(page + 2, Math.ceil(filteredItems.length / pageSize) + 1))
     : Math.max(1, Math.ceil(brregTotal / pageSize))
 
+  // Soft cap so the auto-fetch loop never runs away when most companies don't
+  // match the contact filter (it'd otherwise scan the entire Brreg result set).
+  // The user can break through this cap by clicking "Last flere" below the table.
+  const AUTO_FETCH_CAP_PAGES = 25
+  const [extraPagesAllowed, setExtraPagesAllowed] = useState(0)
+  const fetchCap = AUTO_FETCH_CAP_PAGES + extraPagesAllowed
+  const cappedByUser = hasContactFilter && brregNextPage >= fetchCap && !exhausted
+
   // Auto-fetch more Brreg pages when contact filter is on and we don't have enough filtered items
   // for the current logical page (or one extra to allow forward navigation).
   useEffect(() => {
@@ -1002,6 +1035,9 @@ function ProspektSok() {
     // We only over-fetch when contact filters demand it. Without contact filters,
     // a Brreg page maps 1:1 to a logical page, so we fetch on demand from goToPage().
     if (!hasContactFilter) return
+
+    // Stop after a fixed number of Brreg pages — user can opt in to more.
+    if (brregNextPage >= fetchCap) return
 
     const needed = (page + 2) * pageSize  // current page + one extra so "Next" is responsive
     if (filteredItems.length >= needed) return
@@ -1024,7 +1060,7 @@ function ProspektSok() {
       }
     })()
     return () => { cancelled = true }
-  }, [hasSearched, hasContactFilter, page, pageSize, filteredItems.length, brregNextPage, brregTotalPages, loading, loadingMore, brregTotal])
+  }, [hasSearched, hasContactFilter, page, pageSize, filteredItems.length, brregNextPage, brregTotalPages, loading, loadingMore, brregTotal, fetchCap])
 
   // Page navigation. Without contact filters we can fetch the matching Brreg page on demand.
   const goToPage = useCallback(async (newPage: number) => {
@@ -1283,18 +1319,27 @@ function ProspektSok() {
             ))}
           </div>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
-            Filtreres etter henting fra Brreg — vi henter flere sider automatisk ved behov
+            Brreg støtter ikke filtrering på kontaktinfo — vi henter sider og filtrerer lokalt når du klikker «Søk med filtre»
           </p>
         </div>
 
         {/* Apply button */}
         <button
           onClick={() => doSearch()}
-          className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+          className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+            contactFilterDirty
+              ? 'bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300 dark:ring-amber-600'
+              : 'bg-blue-600 hover:bg-blue-700 text-white'
+          }`}
         >
           <Search className="w-4 h-4" />
-          Søk med filtre
+          {contactFilterDirty ? 'Søk med oppdaterte filtre' : 'Søk med filtre'}
         </button>
+        {contactFilterDirty && hasSearched && (
+          <p className="text-xs text-amber-600 dark:text-amber-400 -mt-2">
+            Du har endret kontaktinfo-filteret — klikk «Søk» for å bruke det.
+          </p>
+        )}
       </div>
 
       {/* Results panel */}
@@ -1449,6 +1494,21 @@ function ProspektSok() {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {/* Soft-cap notice — user can opt in to scanning more Brreg pages */}
+          {cappedByUser && (
+            <div className="m-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-center justify-between gap-4">
+              <div className="text-sm text-amber-800 dark:text-amber-300">
+                Skannet {brregNextPage} av {brregTotalPages.toLocaleString('nb')} Brreg-sider og funnet {filteredItems.length.toLocaleString('nb')} treff med kontaktinfo. Skann flere?
+              </div>
+              <button
+                onClick={() => setExtraPagesAllowed(n => n + 25)}
+                className="flex-shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium transition-colors"
+              >
+                Last flere fra Brreg
+              </button>
+            </div>
           )}
         </div>
 
