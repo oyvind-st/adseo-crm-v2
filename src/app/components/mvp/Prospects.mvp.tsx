@@ -304,13 +304,32 @@ function BransjeCombobox({
 // Sub-component: KommuneCombobox (with fylke grouping)
 // ─────────────────────────────────────────────
 
-// Fylke mapping: first 2 digits of kommunenummer → fylkenavn
+// Fylke mapping — both current (31-56) and legacy (01-20) codes from Brreg
+// Brreg mixes old and new codes during the ongoing administrative reform
 const FYLKE_NAVN: Record<string, string> = {
+  // Legacy codes (still used by many communes in Brreg)
+  '01': 'Østfold',
+  '02': 'Akershus',
   '03': 'Oslo',
+  '04': 'Innlandet',        // Hedmark
+  '05': 'Innlandet',        // Oppland
+  '06': 'Buskerud',
+  '07': 'Vestfold',
+  '08': 'Telemark',
+  '09': 'Agder',            // Aust-Agder
+  '10': 'Agder',            // Vest-Agder
   '11': 'Rogaland',
+  '12': 'Vestland',         // Hordaland
+  '14': 'Vestland',         // Sogn og Fjordane
   '15': 'Møre og Romsdal',
+  '16': 'Trøndelag',        // Sør-Trøndelag
+  '17': 'Trøndelag',        // Nord-Trøndelag
   '18': 'Nordland',
+  '19': 'Troms',
+  '20': 'Finnmark',
   '21': 'Svalbard',
+  '22': 'Jan Mayen',
+  // Current codes (2024 reform)
   '31': 'Østfold',
   '32': 'Akershus',
   '33': 'Buskerud',
@@ -324,11 +343,27 @@ const FYLKE_NAVN: Record<string, string> = {
   '56': 'Finnmark',
 }
 
-// Fylke sort order (south to north, roughly)
-const FYLKE_ORDER = ['03','31','32','33','39','40','42','34','11','46','15','50','18','55','56','21']
+// Fylke sort order — deduplicated names, south to north
+const FYLKE_ORDER = [
+  '03','01','31', // Oslo, Østfold (legacy+new)
+  '02','32',      // Akershus
+  '06','33',      // Buskerud
+  '07','39',      // Vestfold
+  '08','40',      // Telemark
+  '09','10','42', // Agder
+  '04','05','34', // Innlandet
+  '11',           // Rogaland
+  '12','14','46', // Vestland
+  '15',           // Møre og Romsdal
+  '16','17','50', // Trøndelag
+  '18',           // Nordland
+  '19','55',      // Troms
+  '20','56',      // Finnmark
+  '21','22',      // Svalbard/Jan Mayen
+]
 
 function getFylke(nr: string) {
-  return FYLKE_NAVN[nr.slice(0, 2)] || 'Andre'
+  return FYLKE_NAVN[nr.slice(0, 2)] || `Fylke ${nr.slice(0, 2)}`
 }
 
 let _kommunerCache: { nr: string; navn: string }[] | null = null
@@ -389,23 +424,27 @@ function KommuneCombobox({
     })
   }
 
-  // Build groups dynamically from actual API data (not limited to FYLKE_ORDER)
+  // Build groups: group all communes by fylkenavn (merge old+new codes for same county)
   const grouped = (() => {
-    const byKode: Record<string, { nr: string; navn: string }[]> = {}
+    const byNavn: Record<string, { kode: string; kommuner: { nr: string; navn: string }[] }> = {}
     kommuner.forEach(k => {
       const kode = k.nr.slice(0, 2)
-      if (!byKode[kode]) byKode[kode] = []
-      byKode[kode].push(k)
+      const navn = FYLKE_NAVN[kode] || `Fylke ${kode}`
+      if (!byNavn[navn]) byNavn[navn] = { kode, kommuner: [] }
+      byNavn[navn].kommuner.push(k)
     })
-    return Object.entries(byKode)
-      .map(([kode, koms]) => ({
+    // Sort by FYLKE_ORDER using the first occurrence of the fylkenavn
+    const navnOrder = FYLKE_ORDER.map(k => FYLKE_NAVN[k]).filter(Boolean)
+    const uniqueNavnOrder = [...new Set(navnOrder)]
+    return Object.entries(byNavn)
+      .map(([navn, { kode, kommuner: koms }]) => ({
         kode,
-        navn: FYLKE_NAVN[kode] || `Fylke ${kode}`,
+        navn,
         kommuner: koms.sort((a, b) => a.navn.localeCompare(b.navn, 'nb'))
       }))
       .sort((a, b) => {
-        const ai = FYLKE_ORDER.indexOf(a.kode)
-        const bi = FYLKE_ORDER.indexOf(b.kode)
+        const ai = uniqueNavnOrder.indexOf(a.navn)
+        const bi = uniqueNavnOrder.indexOf(b.navn)
         if (ai === -1 && bi === -1) return a.navn.localeCompare(b.navn, 'nb')
         if (ai === -1) return 1
         if (bi === -1) return -1
