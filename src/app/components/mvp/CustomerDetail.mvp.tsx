@@ -292,6 +292,53 @@ export function CustomerDetailMVP() {
       });
   }, [id]);
 
+  // Tickets from Supabase — filtered by this customer's id
+  const [customerTickets, setCustomerTickets] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!id) return;
+    function mapTickets(rows: any[]) {
+      const formatted = rows.map(t => {
+        const created = t.created_at ? new Date(t.created_at) : null
+        const opened = created ? formatRelativeShort(created) : '—'
+        const meldinger = t.siste_svar || []
+        const sisteSvar = meldinger.length > 0
+          ? formatRelativeShort(new Date(meldinger.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at))
+          : 'Ikke besvart'
+        return {
+          id: t.id,
+          subject: t.tittel || 'Uten tittel',
+          description: t.beskrivelse || '',
+          category: t.kategori || '—',
+          priority: t.prioritet === 'høy' ? 'high' : t.prioritet === 'lav' ? 'low' : 'medium',
+          status: t.status === 'apent' ? 'Open' : t.status === 'venter' ? 'Waiting' : t.status === 'lukket' ? 'Closed' : 'Open',
+          opened,
+          assignee: t.ansvarlig?.navn || '—',
+          contact: t.kontakter?.navn || '—',
+          customer: supaCustomer?.bedriftsnavn || '—',
+          lastResponse: sisteSvar,
+        }
+      })
+      setCustomerTickets(formatted)
+    }
+    supabase
+      .from('tickets')
+      .select('*, kontakter(navn), ansvarlig:ansvarlig_id(navn), siste_svar:ticket_meldinger(created_at)')
+      .eq('kunde_id', id)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (error) {
+          supabase.from('tickets')
+            .select('*, kontakter(navn), ansvarlig:ansvarlig_id(navn)')
+            .eq('kunde_id', id)
+            .order('created_at', { ascending: false })
+            .then(({ data: d2 }) => mapTickets(d2 || []))
+          return
+        }
+        mapTickets(data || [])
+      })
+  }, [id, supaCustomer?.bedriftsnavn])
+
   // Build customer object from Supabase data (fallback to mock if loading)
   const customer = {
     id: supaCustomer?.id || id,
@@ -350,55 +397,6 @@ export function CustomerDetailMVP() {
         hasUnreadTickets: l.frist && new Date(l.frist) < new Date(),
       };
     });
-
-  // Tickets from Supabase — filtered by this customer's id
-  const [customerTickets, setCustomerTickets] = useState<any[]>([]);
-
-  useEffect(() => {
-    if (!id) return;
-    supabase
-      .from('tickets')
-      .select('*, kontakter(navn), ansvarlig:ansvarlig_id(navn), siste_svar:ticket_meldinger(created_at)')
-      .eq('kunde_id', id)
-      .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (error) {
-          // Fallback uten relasjons-joins hvis FK ikke finnes
-          supabase.from('tickets')
-            .select('*, kontakter(navn), ansvarlig:ansvarlig_id(navn)')
-            .eq('kunde_id', id)
-            .order('created_at', { ascending: false })
-            .then(({ data: d2 }) => mapTickets(d2 || []))
-          return
-        }
-        mapTickets(data || [])
-      })
-
-    function mapTickets(rows: any[]) {
-      const formatted = rows.map(t => {
-        const created = t.created_at ? new Date(t.created_at) : null
-        const opened = created ? formatRelativeShort(created) : '—'
-        const meldinger = t.siste_svar || []
-        const sisteSvar = meldinger.length > 0
-          ? formatRelativeShort(new Date(meldinger.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at))
-          : 'Ikke besvart'
-        return {
-          id: t.id,
-          subject: t.tittel || 'Uten tittel',
-          description: t.beskrivelse || '',
-          category: t.kategori || '—',
-          priority: t.prioritet === 'høy' ? 'high' : t.prioritet === 'lav' ? 'low' : 'medium',
-          status: t.status === 'apent' ? 'Open' : t.status === 'venter' ? 'Waiting' : t.status === 'lukket' ? 'Closed' : 'Open',
-          opened,
-          assignee: t.ansvarlig?.navn || '—',
-          contact: t.kontakter?.navn || '—',
-          customer: supaCustomer?.bedriftsnavn || '—',
-          lastResponse: sisteSvar,
-        }
-      })
-      setCustomerTickets(formatted)
-    }
-  }, [id, supaCustomer?.bedriftsnavn])
 
   // Tasks from Supabase — filtered by this customer's id
   const [customerTasks, setCustomerTasks] = useState<any[]>([]);
