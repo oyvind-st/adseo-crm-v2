@@ -44,6 +44,20 @@ import {
 import { TaskItem } from '../TaskItem';
 import { DateTimePicker } from '../DateTimePicker';
 import { supabase } from '../../../lib/supabase';
+
+// Relativ tid for ticket-listen (i går / 3 dager siden / 2 uker siden)
+function formatRelativeShort(d: Date): string {
+  const ms = Date.now() - d.getTime()
+  const min = Math.floor(ms / 60000)
+  if (min < 60) return min < 1 ? 'akkurat nå' : `${min} min siden`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr} time${hr === 1 ? '' : 'r'} siden`
+  const days = Math.floor(hr / 24)
+  if (days === 1) return 'i går'
+  if (days < 7) return `${days} dager siden`
+  if (days < 30) return `${Math.floor(days / 7)} uker siden`
+  return `${Math.floor(days / 30)} mnd siden`
+}
 import { Button, Avatar, Badge, PriorityBadge, StatusBadge, Loading, Card, LeveranseRow } from '../shared';
 import { useProfiles } from '../../../lib/useProfiles';
 import { useCurrentUser } from '../../contexts/UserContext';
@@ -307,21 +321,7 @@ export function CustomerDetailMVP() {
       { type: 'note', title: 'Intern note', description: 'Kunden er svært interessert i å se resultater raskt', date: '3 dager siden', user: 'Ola Nordmann' },
       { type: 'email', title: 'E-post sendt', description: 'Velkomst-e-post med onboarding-info', date: '5 dager siden', user: 'Ola Nordmann' }
     ],
-    tickets: [
-      {
-        id: '1234',
-        subject: 'Spørsmål om rapportdata',
-        description: 'Kunde lurer på hvorfor trafikktallene er annerledes enn i Google Analytics',
-        category: 'Rapport og tall',
-        priority: 'medium',
-        status: 'Open',
-        opened: '1 dag siden',
-        assignee: 'Ola Nordmann',
-        contact: 'Maria Hansen',
-        customer: 'Nordic Tech AS',
-        lastResponse: '3 timer siden'
-      }
-    ]
+    tickets: customerTickets,
   };
 
   // Deliveries data
@@ -350,6 +350,55 @@ export function CustomerDetailMVP() {
         hasUnreadTickets: l.frist && new Date(l.frist) < new Date(),
       };
     });
+
+  // Tickets from Supabase — filtered by this customer's id
+  const [customerTickets, setCustomerTickets] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!id) return;
+    supabase
+      .from('tickets')
+      .select('*, kontakter(navn), ansvarlig:ansvarlig_id(navn), siste_svar:ticket_meldinger(created_at)')
+      .eq('kunde_id', id)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (error) {
+          // Fallback uten relasjons-joins hvis FK ikke finnes
+          supabase.from('tickets')
+            .select('*, kontakter(navn), ansvarlig:ansvarlig_id(navn)')
+            .eq('kunde_id', id)
+            .order('created_at', { ascending: false })
+            .then(({ data: d2 }) => mapTickets(d2 || []))
+          return
+        }
+        mapTickets(data || [])
+      })
+
+    function mapTickets(rows: any[]) {
+      const formatted = rows.map(t => {
+        const created = t.created_at ? new Date(t.created_at) : null
+        const opened = created ? formatRelativeShort(created) : '—'
+        const meldinger = t.siste_svar || []
+        const sisteSvar = meldinger.length > 0
+          ? formatRelativeShort(new Date(meldinger.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at))
+          : 'Ikke besvart'
+        return {
+          id: t.id,
+          subject: t.tittel || 'Uten tittel',
+          description: t.beskrivelse || '',
+          category: t.kategori || '—',
+          priority: t.prioritet === 'høy' ? 'high' : t.prioritet === 'lav' ? 'low' : 'medium',
+          status: t.status === 'apent' ? 'Open' : t.status === 'venter' ? 'Waiting' : t.status === 'lukket' ? 'Closed' : 'Open',
+          opened,
+          assignee: t.ansvarlig?.navn || '—',
+          contact: t.kontakter?.navn || '—',
+          customer: supaCustomer?.bedriftsnavn || '—',
+          lastResponse: sisteSvar,
+        }
+      })
+      setCustomerTickets(formatted)
+    }
+  }, [id, supaCustomer?.bedriftsnavn])
 
   // Tasks from Supabase — filtered by this customer's id
   const [customerTasks, setCustomerTasks] = useState<any[]>([]);
