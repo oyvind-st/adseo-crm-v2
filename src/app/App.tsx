@@ -8,8 +8,6 @@ import { Login } from './components/Login'
 import { SetPasswordModal } from './components/SetPasswordModal'
 
 // Full Figma components with Supabase
-import { Dashboard } from './components/Dashboard'
-import { TaskList } from './components/TaskList'
 import { Settings } from './components/Settings'
 // Supabase-connected MVP components
 import { DashboardMVP } from './components/mvp/Dashboard.mvp'
@@ -19,6 +17,7 @@ import { TaskListMVP } from './components/mvp/TaskList.mvp'
 import { TicketListMVP } from './components/mvp/TicketList.mvp'
 import { TicketDetailMVP } from './components/mvp/TicketDetail.mvp'
 import { LeveranserListMVP } from './components/mvp/LeveranserList.mvp'
+import { LeveranseDetailMVP } from './components/mvp/LeveranseDetail.mvp'
 import { LeadListMVP } from './components/mvp/LeadList.mvp'
 import { DesignSystemMVP } from './components/mvp/DesignSystem.mvp'
 import { ProspectsMVP } from './components/mvp/Prospects.mvp'
@@ -51,20 +50,21 @@ function AppRoutes() {
       {isFirstLogin && <SetPasswordModal />}
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
+          <Route index element={<DashboardMVP />} />
           <Route path="customers" element={<CustomerListMVP />} />
           <Route path="customers/:id" element={<CustomerDetailMVP />} />
           <Route path="tasks" element={<TaskListMVP />} />
           <Route path="tickets" element={<TicketListMVP />} />
           <Route path="tickets/:id" element={<TicketDetailMVP />} />
           <Route path="leveranser" element={<LeveranserListMVP />} />
+          <Route path="leveranser/:id" element={<LeveranseDetailMVP />} />
           <Route path="leads" element={<LeadListMVP />} />
           <Route path="prospects" element={<ProspectsMVP />} />
           <Route path="call-list" element={<RingelisteMVP />} />
           <Route path="ringeliste" element={<RingelisteMVP />} />
           <Route path="settings" element={<Settings />} />
           <Route path="design-system" element={<DesignSystemMVP />} />
-          <Route path="*" element={<Dashboard />} />
+          <Route path="*" element={<DashboardMVP />} />
         </Route>
       </Routes>
     </BrowserRouter>

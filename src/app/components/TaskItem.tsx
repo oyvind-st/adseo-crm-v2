@@ -185,6 +185,7 @@ interface TaskItemProps {
   showLogPanel?: boolean;
   currentUserNavn?: string;
   kundeId?: string;
+  leveranseId?: string;
 }
 
 export function TaskItem({
@@ -202,6 +203,7 @@ export function TaskItem({
   showLogPanel = false,
   currentUserNavn = '',
   kundeId,
+  leveranseId,
 }: TaskItemProps) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
@@ -217,6 +219,8 @@ export function TaskItem({
   const handleTaskClick = () => {
     if (onClick) {
       onClick();
+    } else if (leveranseId) {
+      navigate(`/leveranser/${leveranseId}`);
     } else if (task.customerId) {
       // Navigate to customer detail with state to open quick log
       navigate(`/customers/${task.customerId}`, {

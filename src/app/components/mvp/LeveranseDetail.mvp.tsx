@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { supabase } from '../../../lib/supabase';
 import { useProfiles } from '../../../lib/useProfiles';
 import { useCurrentUser } from '../../contexts/UserContext';
 import {
@@ -181,37 +182,41 @@ export function LeveranseDetailMVP() {
   const { profiles } = useProfiles();
   const { user: currentUser } = useCurrentUser();
 
-  // Mock data (non-editable)
+  // Fetched leveranse data
+  type LeveranseRow = {
+    id: string;
+    tittel: string;
+    type: string | null;
+    status: string;
+    frist: string | null;
+    beskrivelse: string | null;
+    ansvarlig_id: string | null;
+    kunder: { id: string; bedriftsnavn: string } | null;
+    profiles: { id: string; navn: string } | null;
+  };
+  const [leveranseRow, setLeveranseRow] = useState<LeveranseRow | null>(null);
+  const [loadingData, setLoadingData] = useState(true);
+
+  // Derived display object — same shape used by the rest of the JSX
   const leveranse = {
-    id: '1',
-    customer: 'Nordic Tech AS',
-    customerId: '1',
-    type: 'Hjemmeside',
-    status: 'in_progress',
-    progress: 60,
-    responsible: 'Ola Nordmann',
-    deadline: '30. mai 2026',
-    createdDate: '15. april 2026',
-    description: '5-siders bedriftsside med CMS',
-    relatedTickets: [
-      { id: '1234', subject: 'Spørsmål om rapportdata', status: 'Open', date: '1 dag siden' },
-      { id: '1236', subject: 'Teknisk feil på tracking', status: 'Open', date: '4 timer siden' }
-    ]
+    id:          leveranseRow?.id ?? '',
+    customer:    leveranseRow?.kunder?.bedriftsnavn ?? '—',
+    customerId:  leveranseRow?.kunder?.id ?? '',
+    type:        leveranseRow?.type ?? '—',
+    status:      leveranseRow?.status ?? 'ikke_startet',
+    responsible: leveranseRow?.profiles?.navn ?? '—',
+    deadline:    leveranseRow?.frist
+      ? new Date(leveranseRow.frist + 'T00:00:00').toLocaleDateString('no-NO', { day: 'numeric', month: 'long', year: 'numeric' })
+      : 'Ingen frist',
+    description:  leveranseRow?.tittel ?? '',
+    createdDate:  '',
+    relatedTickets: [] as { id: string; subject: string; status: string; date: string }[],
   };
 
   // Editable state
-  const [detailedDescription, setDetailedDescription] = useState('Kunde ønsker en moderne, responsiv hjemmeside med:\n- Forside\n- Om oss-side\n- Tjenester-side\n- Blogg\n- Kontakt-side\n\nMed WordPress som CMS for enkel oppdatering av innhold.');
-  const [requirements, setRequirements] = useState([
-    'Responsiv design (mobil, tablet, desktop)',
-    'Kontaktskjema med e-postvarsling',
-    'Integrasjon med sosiale medier',
-    'SEO-optimalisert',
-    'GDPR-compliant cookie-banner'
-  ]);
-  const [references, setReferences] = useState([
-    'https://example1.no',
-    'https://example2.no'
-  ]);
+  const [detailedDescription, setDetailedDescription] = useState('');
+  const [requirements, setRequirements] = useState<string[]>([]);
+  const [references, setReferences] = useState<string[]>([]);
 
   // Phase structure with tasks
   type Task = {
@@ -230,131 +235,7 @@ export function LeveranseDetailMVP() {
     tasks: Task[];
   };
 
-  const [phases, setPhases] = useState<Phase[]>([
-    {
-      id: '1',
-      name: 'Oppstart',
-      tasks: [
-        {
-          id: 'task_1_1',
-          title: 'Motta info fra kunde',
-          description: 'Samle inn all nødvendig informasjon om prosjektet',
-          status: 'Done',
-          assignee: 'Ola Nordmann',
-          dueDate: '2026-04-20',
-          priority: 'high'
-        },
-        {
-          id: 'task_1_2',
-          title: 'Motta logoer og bilder',
-          description: 'Få tilsendt alle visuelle ressurser',
-          status: 'Done',
-          assignee: 'Ola Nordmann',
-          dueDate: '2026-04-22',
-          priority: 'high'
-        },
-        {
-          id: '3',
-          title: 'Onboarding oppfølging',
-          description: 'Sjekk at alle tilganger er på plass',
-          status: 'Not started',
-          assignee: 'Ola Nordmann',
-          dueDate: '2026-04-30',
-          priority: 'medium'
-        }
-      ]
-    },
-    {
-      id: '2',
-      name: 'Teknisk oppsett',
-      tasks: [
-        {
-          id: 'task_2_1',
-          title: 'Registrer domene',
-          description: 'Registrere eller overføre domene',
-          status: 'Done',
-          assignee: 'Ola Nordmann',
-          dueDate: '2026-04-23',
-          priority: 'high'
-        },
-        {
-          id: 'task_2_2',
-          title: 'Sett opp hosting',
-          description: 'Konfigurere server og hosting-miljø',
-          status: 'Done',
-          assignee: 'Ola Nordmann',
-          dueDate: '2026-04-24',
-          priority: 'high'
-        },
-        {
-          id: '2',
-          title: 'Sett opp Google Analytics tracking',
-          description: 'Verifiser at tracking er korrekt',
-          status: 'Not started',
-          assignee: 'Kari Jensen',
-          dueDate: '2026-04-28',
-          priority: 'high'
-        }
-      ]
-    },
-    {
-      id: '3',
-      name: 'Design og innhold',
-      tasks: [
-        {
-          id: 'task_3_1',
-          title: 'Lag design',
-          description: 'Designe sidene i Figma basert på kundens ønsker',
-          status: 'In progress',
-          assignee: 'Kari Jensen',
-          dueDate: '2026-04-27',
-          priority: 'high'
-        },
-        {
-          id: 'task_3_2',
-          title: 'Få godkjenning på design',
-          description: 'Presentere og få godkjenning fra kunde',
-          status: 'Not started',
-          assignee: 'Kari Jensen',
-          dueDate: '2026-04-29',
-          priority: 'high'
-        },
-        {
-          id: '1',
-          title: 'Send månedsrapport',
-          description: 'Første månedsrapport SEO',
-          status: 'In progress',
-          assignee: 'Ola Nordmann',
-          dueDate: '2026-04-27',
-          priority: 'high'
-        }
-      ]
-    },
-    {
-      id: '4',
-      name: 'Utvikling',
-      tasks: [
-        {
-          id: 'task_4_1',
-          title: 'Utvikle frontend',
-          description: 'Kode HTML/CSS/JS basert på godkjent design',
-          status: 'Not started',
-          assignee: 'Ola Nordmann',
-          dueDate: '2026-05-06',
-          priority: 'high'
-        },
-        {
-          id: 'task_4_2',
-          title: 'Sett opp CMS',
-          description: 'Installere og konfigurere WordPress',
-          status: 'Not started',
-          assignee: 'Ola Nordmann',
-          dueDate: '2026-05-08',
-          priority: 'medium'
-        }
-      ]
-    }
-  ]);
+  const [phases, setPhases] = useState<Phase[]>([]);
 
   // Temp editing values
   const [tempDescription, setTempDescription] = useState('');
@@ -395,48 +276,60 @@ export function LeveranseDetailMVP() {
     return date.toLocaleDateString('no-NO', { day: 'numeric', month: 'long' });
   }
 
-  const [activities, setActivities] = useState([
-    {
-      id: '1',
-      type: 'comment',
-      user: 'Kari Jensen',
-      message: 'Design er nå klar for godkjenning. Sendt til kunde.',
-      timestamp: '2 timer siden'
-    },
-    {
-      id: '2',
-      type: 'task_completed',
-      user: 'Ola Nordmann',
-      message: 'Fullførte oppgave: Motta logoer og bilder fra kunde',
-      timestamp: '1 dag siden'
-    },
-    {
-      id: '3',
-      type: 'status_change',
-      user: 'Ola Nordmann',
-      message: 'Endret status fra "Ikke startet" til "Pågår"',
-      timestamp: '3 dager siden'
-    },
-    {
-      id: '4',
-      type: 'created',
-      user: 'System',
-      message: 'Leveranse opprettet',
-      timestamp: '2 uker siden'
-    }
-  ]);
+  const [activities, setActivities] = useState<{ id: string; type: string; user: string; message: string; timestamp: string }[]>([]);
 
-  const [currentStatus, setCurrentStatus] = useState(leveranse.status);
-  const [currentResponsible, setCurrentResponsible] = useState(leveranse.responsible);
+  const [currentStatus, setCurrentStatus] = useState('ikke_startet');
+  const [currentAnsvarligId, setCurrentAnsvarligId] = useState('');
+  const [currentResponsible, setCurrentResponsible] = useState('');
+
+  // Fetch real leveranse data + phases/tasks on mount
+  useEffect(() => {
+    if (!id) return;
+    setLoadingData(true);
+    Promise.all([
+      supabase.from('leveranser').select('*, kunder(id, bedriftsnavn), profiles(id, navn)').eq('id', id).single(),
+      supabase.from('leveranse_faser').select('*').eq('leveranse_id', id).order('sort_order'),
+      supabase.from('leveranse_oppgaver').select('*').eq('leveranse_id', id).order('sort_order'),
+    ]).then(([{ data: lev }, { data: faser }, { data: oppgaver }]) => {
+      if (lev) {
+        setLeveranseRow(lev as LeveranseRow);
+        setCurrentStatus(lev.status ?? 'ikke_startet');
+        setCurrentAnsvarligId(lev.ansvarlig_id ?? '');
+        setCurrentResponsible((lev.profiles as any)?.navn ?? '');
+        setDetailedDescription(lev.beskrivelse ?? '');
+      }
+      if (faser) {
+        setPhases(faser.map(fase => ({
+          id: fase.id,
+          name: fase.navn,
+          tasks: (oppgaver || [])
+            .filter(o => o.fase_id === fase.id)
+            .map(o => ({
+              id: o.id,
+              title: o.tittel,
+              description: o.beskrivelse || '',
+              status: (o.status as 'Not started' | 'In progress' | 'Done') || (o.fullfort ? 'Done' : 'Not started'),
+              assignee: o.assignee || '',
+              dueDate: o.frist || '',
+              priority: (o.prioritet as 'low' | 'medium' | 'high') || 'medium',
+            })),
+        })));
+      }
+      setLoadingData(false);
+    });
+  }, [id]);
 
   // Update main assignee for all tasks
-  const handleChangeMainResponsible = (newResponsible: string) => {
-    setCurrentResponsible(newResponsible);
-    // Optionally update all tasks to new assignee
-    if (confirm(`Vil du også oppdatere ansvarlig på alle oppgaver til ${newResponsible}?`)) {
+  const handleChangeMainResponsible = (profileId: string) => {
+    const profile = profiles.find(p => p.id === profileId);
+    const navn = profile?.navn ?? '';
+    setCurrentAnsvarligId(profileId);
+    setCurrentResponsible(navn);
+    supabase.from('leveranser').update({ ansvarlig_id: profileId || null }).eq('id', id!).then(() => {});
+    if (navn && confirm(`Vil du også oppdatere ansvarlig på alle oppgaver til ${navn}?`)) {
       setPhases(phases.map(phase => ({
         ...phase,
-        tasks: phase.tasks.map(task => ({ ...task, assignee: newResponsible }))
+        tasks: phase.tasks.map(task => ({ ...task, assignee: navn }))
       })));
     }
   };
@@ -458,6 +351,7 @@ export function LeveranseDetailMVP() {
 
   const handleDeleteTask = (taskId: string) => {
     if (confirm('Er du sikker på at du vil slette denne oppgaven?')) {
+      supabase.from('leveranse_oppgaver').delete().eq('id', taskId).then(() => {});
       setPhases(phases.map(phase => ({
         ...phase,
         tasks: phase.tasks.filter(t => t.id !== taskId)
@@ -474,6 +368,7 @@ export function LeveranseDetailMVP() {
 
   const handleUpdateTaskStatus = (taskId: string, newStatus: 'Not started' | 'In progress' | 'Done') => {
     handleEditTask(taskId, { status: newStatus });
+    supabase.from('leveranse_oppgaver').update({ status: newStatus, fullfort: newStatus === 'Done' }).eq('id', taskId).then(() => {});
   };
 
   const handleStartEditTask = (task: Task) => {
@@ -484,6 +379,15 @@ export function LeveranseDetailMVP() {
   const handleSaveEditTask = () => {
     if (!editingTask) return;
     handleEditTask(editingTask.id, editingTask);
+    supabase.from('leveranse_oppgaver').update({
+      tittel: editingTask.title,
+      beskrivelse: editingTask.description,
+      status: editingTask.status,
+      fullfort: editingTask.status === 'Done',
+      assignee: editingTask.assignee,
+      frist: editingTask.dueDate || null,
+      prioritet: editingTask.priority,
+    }).eq('id', editingTask.id).then(() => {});
     setEditingTask(null);
     setShowEditTaskModal(false);
   };
@@ -502,6 +406,7 @@ export function LeveranseDetailMVP() {
   const handleSaveDescription = () => {
     setDetailedDescription(tempDescription);
     setEditingDescription(false);
+    supabase.from('leveranser').update({ beskrivelse: tempDescription }).eq('id', id!).then(() => {});
   };
 
   const handleCancelEditDescription = () => {
@@ -570,96 +475,132 @@ export function LeveranseDetailMVP() {
   };
 
   // Phase and task management
-  const handleAddPhase = () => {
+  const handleAddPhase = async () => {
     if (!newPhaseName.trim()) return;
-    const newPhase: Phase = {
-      id: String(phases.length + 1),
-      name: newPhaseName,
-      tasks: []
-    };
-    setPhases([...phases, newPhase]);
+    const { data: faseRow } = await supabase.from('leveranse_faser').insert({
+      leveranse_id: id,
+      navn: newPhaseName,
+      sort_order: phases.length,
+    }).select().single();
+    if (faseRow) {
+      setPhases([...phases, { id: faseRow.id, name: faseRow.navn, tasks: [] }]);
+    }
     setNewPhaseName('');
     setShowAddPhaseModal(false);
   };
 
   const handleDeletePhase = (phaseId: string) => {
     if (confirm('Er du sikker på at du vil slette denne fasen og alle oppgavene i den?')) {
+      supabase.from('leveranse_oppgaver').delete().eq('fase_id', phaseId).then(() => {});
+      supabase.from('leveranse_faser').delete().eq('id', phaseId).then(() => {});
       setPhases(phases.filter(p => p.id !== phaseId));
     }
   };
 
-  const handleAddTask = () => {
+  const handleAddTask = async () => {
     if (!newTaskData.title.trim() || !selectedPhaseForTask) return;
 
     const startDate = new Date();
     startDate.setDate(startDate.getDate() + 1);
     const dueDate = new Date(startDate);
     dueDate.setDate(dueDate.getDate() + newTaskData.estimatedDays);
+    const dueDateStr = dueDate.toISOString().split('T')[0];
+    const phaseTaskCount = phases.find(p => p.id === selectedPhaseForTask)?.tasks.length ?? 0;
 
-    const newTask: Task = {
-      id: String(Date.now()),
-      title: newTaskData.title,
-      description: newTaskData.description,
+    const { data: taskRow } = await supabase.from('leveranse_oppgaver').insert({
+      leveranse_id: id,
+      fase_id: selectedPhaseForTask,
+      tittel: newTaskData.title,
+      beskrivelse: newTaskData.description,
+      fullfort: false,
       status: 'Not started',
       assignee: newTaskData.assignee,
-      dueDate: dueDate.toISOString().split('T')[0],
-      priority: newTaskData.priority
-    };
+      frist: dueDateStr,
+      prioritet: newTaskData.priority,
+      sort_order: phaseTaskCount,
+    }).select().single();
 
-    setPhases(phases.map(phase =>
-      phase.id === selectedPhaseForTask
-        ? { ...phase, tasks: [...phase.tasks, newTask] }
-        : phase
-    ));
+    if (taskRow) {
+      const newTask: Task = {
+        id: taskRow.id,
+        title: taskRow.tittel,
+        description: taskRow.beskrivelse || '',
+        status: 'Not started',
+        assignee: taskRow.assignee || '',
+        dueDate: taskRow.frist || '',
+        priority: (taskRow.prioritet as 'low' | 'medium' | 'high') || 'medium',
+      };
+      setPhases(phases.map(phase =>
+        phase.id === selectedPhaseForTask
+          ? { ...phase, tasks: [...phase.tasks, newTask] }
+          : phase
+      ));
+    }
 
-    setNewTaskData({
-      title: '',
-      description: '',
-      assignee: currentResponsible,
-      estimatedDays: 1,
-      priority: 'medium'
-    });
+    setNewTaskData({ title: '', description: '', assignee: currentResponsible, estimatedDays: 1, priority: 'medium' });
     setShowAddTaskModal(false);
     setSelectedPhaseForTask(null);
   };
 
-  const handleLoadTemplate = (templateName: string) => {
+  const handleLoadTemplate = async (templateName: string) => {
     const template = phaseTemplates[templateName as keyof typeof phaseTemplates];
     if (!template) return;
 
-    let taskIdCounter = 1;
+    // Wipe existing phases + tasks for this leveranse
+    await supabase.from('leveranse_oppgaver').delete().eq('leveranse_id', id);
+    await supabase.from('leveranse_faser').delete().eq('leveranse_id', id);
+
     const startDate = new Date();
     startDate.setDate(startDate.getDate() + 1);
 
-    const newPhases: Phase[] = template.map((phaseTemplate, phaseIndex) => {
+    // Insert all phases at once
+    const { data: faseRows } = await supabase.from('leveranse_faser').insert(
+      template.map((pt, i) => ({ leveranse_id: id, navn: pt.name, sort_order: i }))
+    ).select();
+
+    if (!faseRows) { setShowTemplateModal(false); return; }
+
+    // Build all tasks across phases
+    const allTaskInserts: object[] = [];
+    const tasksByPhase: Task[][] = faseRows.map((faseRow, phaseIndex) => {
+      const phaseTemplate = template[phaseIndex];
       let currentDate = new Date(startDate);
-      currentDate.setDate(currentDate.getDate() + (phaseIndex * 7)); // Each phase starts roughly a week apart
-
-      const tasks: Task[] = phaseTemplate.tasks.map((taskTemplate) => {
-        const dueDate = new Date(currentDate);
-        dueDate.setDate(dueDate.getDate() + taskTemplate.estimatedDays);
-        currentDate = new Date(dueDate);
-
-        const task: Task = {
-          id: String(taskIdCounter++),
-          title: taskTemplate.title,
-          description: taskTemplate.description,
+      currentDate.setDate(currentDate.getDate() + phaseIndex * 7);
+      return phaseTemplate.tasks.map((taskTemplate, taskIndex) => {
+        const due = new Date(currentDate);
+        due.setDate(due.getDate() + taskTemplate.estimatedDays);
+        currentDate = new Date(due);
+        allTaskInserts.push({
+          leveranse_id: id,
+          fase_id: faseRow.id,
+          tittel: taskTemplate.title,
+          beskrivelse: taskTemplate.description,
+          fullfort: false,
           status: 'Not started',
           assignee: currentResponsible,
-          dueDate: dueDate.toISOString().split('T')[0],
-          priority: 'medium'
-        };
-        return task;
+          frist: due.toISOString().split('T')[0],
+          prioritet: 'medium',
+          sort_order: taskIndex,
+        });
+        return { id: '', title: taskTemplate.title, description: taskTemplate.description, status: 'Not started' as const, assignee: currentResponsible, dueDate: due.toISOString().split('T')[0], priority: 'medium' as const };
       });
-
-      return {
-        id: String(phaseIndex + 1),
-        name: phaseTemplate.name,
-        tasks
-      };
     });
 
-    setPhases(newPhases);
+    const { data: taskRows } = await supabase.from('leveranse_oppgaver').insert(allTaskInserts).select();
+
+    // Rebuild phases with real DB ids
+    let taskCursor = 0;
+    const savedPhases: Phase[] = faseRows.map((faseRow, phaseIndex) => {
+      const phaseTasks = tasksByPhase[phaseIndex];
+      const dbTasks: Task[] = phaseTasks.map((t, ti) => ({
+        ...t,
+        id: taskRows?.[taskCursor + ti]?.id ?? String(Date.now() + ti),
+      }));
+      taskCursor += phaseTasks.length;
+      return { id: faseRow.id, name: faseRow.navn, tasks: dbTasks };
+    });
+
+    setPhases(savedPhases);
     setShowTemplateModal(false);
   };
 
@@ -761,13 +702,13 @@ export function LeveranseDetailMVP() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'not_started':
+      case 'ikke_startet':
         return 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300';
-      case 'in_progress':
+      case 'pagar':
         return 'bg-blue-100 text-blue-700';
-      case 'waiting':
-        return 'bg-yellow-100 text-yellow-700';
-      case 'completed':
+      case 'venter_pa_kunde':
+        return 'bg-amber-100 text-amber-700';
+      case 'ferdig':
         return 'bg-green-100 text-green-700';
       default:
         return 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300';
@@ -784,6 +725,12 @@ export function LeveranseDetailMVP() {
   const totalTasks = allTasks.length;
   const completedTasks = allTasks.filter(task => task.status === 'Done').length;
   const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  if (loadingData) return (
+    <div className="h-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+      <div className="w-8 h-8 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+    </div>
+  );
 
   return (
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-900">
@@ -829,13 +776,16 @@ export function LeveranseDetailMVP() {
               </label>
               <select
                 value={currentStatus}
-                onChange={(e) => setCurrentStatus(e.target.value)}
+                onChange={(e) => {
+                  setCurrentStatus(e.target.value);
+                  supabase.from('leveranser').update({ status: e.target.value }).eq('id', id!).then(() => {});
+                }}
                 className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="not_started">Ikke startet</option>
-                <option value="in_progress">Pågår</option>
-                <option value="waiting">Venter på kunde</option>
-                <option value="completed">Ferdig</option>
+                <option value="ikke_startet">Ikke startet</option>
+                <option value="pagar">Pågår</option>
+                <option value="venter_pa_kunde">Venter på kunde</option>
+                <option value="ferdig">Ferdig</option>
               </select>
             </div>
             <div>
@@ -843,13 +793,13 @@ export function LeveranseDetailMVP() {
                 Hovedansvarlig
               </label>
               <select
-                value={currentResponsible}
+                value={currentAnsvarligId}
                 onChange={(e) => handleChangeMainResponsible(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">— Velg ansvarlig</option>
                 {profiles.map((p) => (
-                  <option key={p.id} value={p.navn}>{p.navn}</option>
+                  <option key={p.id} value={p.id}>{p.navn}</option>
                 ))}
               </select>
             </div>

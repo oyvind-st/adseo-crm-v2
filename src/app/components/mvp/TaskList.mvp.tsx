@@ -16,11 +16,12 @@ interface Task {
   assignee: string;
   assigneeId?: string;
   dueDate: string;
-  dueDateRaw?: string; // ISO date string for comparisons
+  dueDateRaw?: string;
   priority: 'high' | 'medium' | 'low';
   status: string;
   overdue?: boolean;
   type?: string;
+  leveranseId?: string;
 }
 
 function formatDate(iso?: string): string {
@@ -33,8 +34,8 @@ function todayStr(): string {
 }
 
 function mapPriority(prioritet?: string): 'high' | 'medium' | 'low' {
-  if (prioritet === 'høy') return 'high';
-  if (prioritet === 'lav') return 'low';
+  if (prioritet === 'høy' || prioritet === 'hoy' || prioritet === 'high') return 'high';
+  if (prioritet === 'lav' || prioritet === 'low') return 'low';
   return 'medium';
 }
 
@@ -61,34 +62,72 @@ export function TaskListMVP() {
   // Load tasks from Supabase
   const loadTasks = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('oppgaver')
-      .select('*, kunder(bedriftsnavn), ansvarlig:ansvarlig_id(id, navn)')
-      .order('frist', { ascending: true, nullsFirst: false });
+    const today = todayStr();
 
-    if (data) {
-      const today = todayStr();
-      const mapped: Task[] = (data as any[]).map((row) => {
-        const fristStr = row.frist ? row.frist.slice(0, 10) : undefined;
-        const isOverdue = !!fristStr && fristStr < today && row.status !== 'fullfort';
-        return {
-          id: row.id,
-          title: row.tittel,
-          description: row.beskrivelse ?? '',
-          customer: row.kunder?.bedriftsnavn,
-          customerId: row.kunde_id,
-          assignee: row.ansvarlig?.navn ?? '',
-          assigneeId: row.ansvarlig?.id,
-          dueDate: formatDate(row.frist),
-          dueDateRaw: fristStr,
-          priority: mapPriority(row.prioritet),
-          status: mapStatus(row.status),
-          overdue: isOverdue,
-          type: row.type,
-        };
-      });
-      setTasks(mapped);
+    const [{ data }, { data: levOppg }, { data: leveranser }] = await Promise.all([
+      supabase
+        .from('oppgaver')
+        .select('*, kunder(bedriftsnavn), ansvarlig:ansvarlig_id(id, navn)')
+        .order('frist', { ascending: true, nullsFirst: false }),
+      supabase
+        .from('leveranse_oppgaver')
+        .select('id, tittel, beskrivelse, prioritet, frist, status, fullfort, assignee, leveranse_id')
+        .order('frist', { ascending: true, nullsFirst: false }),
+      supabase
+        .from('leveranser')
+        .select('id, tittel, kunder(bedriftsnavn)'),
+    ]);
+
+    // Build leveranse lookup
+    const levMap = new Map<string, { tittel: string; kunde?: string }>();
+    for (const l of (leveranser as any[] || [])) {
+      levMap.set(l.id, { tittel: l.tittel, kunde: (l.kunder as any)?.bedriftsnavn });
     }
+
+    const mapped: Task[] = (data as any[] || []).map((row) => {
+      const fristStr = row.frist ? row.frist.slice(0, 10) : undefined;
+      const isOverdue = !!fristStr && fristStr < today && row.status !== 'fullfort';
+      return {
+        id: row.id,
+        title: row.tittel,
+        description: row.beskrivelse ?? '',
+        customer: row.kunder?.bedriftsnavn,
+        customerId: row.kunde_id,
+        assignee: row.ansvarlig?.navn ?? '',
+        assigneeId: row.ansvarlig?.id,
+        dueDate: formatDate(row.frist),
+        dueDateRaw: fristStr,
+        priority: mapPriority(row.prioritet),
+        status: mapStatus(row.status),
+        overdue: isOverdue,
+        type: row.type,
+      };
+    });
+
+    const mappedLev: Task[] = (levOppg as any[] || []).map((row) => {
+      const fristStr = row.frist ? row.frist.slice(0, 10) : undefined;
+      const done = row.fullfort || row.status === 'Done';
+      const isOverdue = !!fristStr && fristStr < today && !done;
+      const lev = levMap.get(row.leveranse_id);
+      return {
+        id: `lev-${row.id}`,
+        title: row.tittel,
+        description: row.beskrivelse ?? '',
+        customer: lev?.kunde ?? lev?.tittel,
+        customerId: undefined,
+        assignee: row.assignee ?? '',
+        assigneeId: undefined,
+        dueDate: formatDate(row.frist),
+        dueDateRaw: fristStr,
+        priority: mapPriority(row.prioritet),
+        status: done ? 'Done' : mapStatus(row.status),
+        overdue: isOverdue,
+        type: 'leveranse',
+        leveranseId: row.leveranse_id,
+      };
+    });
+
+    setTasks([...mapped, ...mappedLev]);
     setLoading(false);
   };
 
@@ -159,11 +198,17 @@ export function TaskListMVP() {
     }
   };
 
+  const priorityToDb = (p: string) => {
+    if (p === 'high') return 'høy';
+    if (p === 'low') return 'lav';
+    return 'medium';
+  };
+
   const handleEditTask = async (taskId: string, updatedTask: any) => {
-    // Map back to DB fields for save
     await supabase.from('oppgaver').update({
       tittel: updatedTask.title,
       beskrivelse: updatedTask.description,
+      prioritet: priorityToDb(updatedTask.priority),
     }).eq('id', taskId);
     loadTasks();
   };
@@ -368,6 +413,7 @@ export function TaskListMVP() {
                 showLogPanel={openLogId === task.id}
                 currentUserNavn={user?.navn ?? ''}
                 kundeId={task.customerId}
+                leveranseId={task.leveranseId}
               />
             ))}
           </div>
